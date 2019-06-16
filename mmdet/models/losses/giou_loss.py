@@ -58,5 +58,6 @@ class GIoULoss(nn.Module):
         self.loss_weight = loss_weight
 
     def forward(self, pred, target, weight, *args, **kwargs):
+        weight = weight[:, 0]
         loss = self.loss_weight * generalized_iou_loss(pred, target, weight, *args, **kwargs)
         return loss

@@ -1,8 +1,10 @@
 import torch
 import torch.nn as nn
 from ..registry import LOSSES
+from .utils import weighted_loss
 
 
+@weighted_loss
 def generalized_iou_loss(pred, target):
     assert pred.size() == target.size() and target.numel() > 0
 
@@ -23,29 +25,29 @@ def generalized_iou_loss(pred, target):
     ious = overlap / u
     gious = ious - (convex - u) / convex  # [n]
 
-    return (1 - gious).sum()
+    return 1 - gious  # (1 - gious).sum()
 
 
-def weighted_generalized_iou_loss(pred,
-                                  target,
-                                  weight,
-                                  avg_factor=None):
-    """
-
-    :param pred:   [n, 4]
-    :param target: [n, 4]
-    :param weight: [n, 4] 掩码数组，用于区分正负样本（仅正样本贡献reg loss）
-    :param avg_factor: scalar
-    :return:
-    """
-    inds = torch.nonzero(weight[:, 0] > 0)
-    if inds.numel() > 0:
-        inds = inds.squeeze(1)
-    if avg_factor is None:
-        avg_factor = inds.numel() + 1e-6
-    loss = generalized_iou_loss(pred[inds], target[inds])
-
-    return loss[None] / avg_factor
+# def weighted_generalized_iou_loss(pred,
+#                                   target,
+#                                   weight,
+#                                   avg_factor=None):
+#     """
+#
+#     :param pred:   [n, 4]
+#     :param target: [n, 4]
+#     :param weight: [n, 4] 掩码数组，用于区分正负样本（仅正样本贡献reg loss）
+#     :param avg_factor: scalar
+#     :return:
+#     """
+#     inds = torch.nonzero(weight[:, 0] > 0)
+#     if inds.numel() > 0:
+#         inds = inds.squeeze(1)
+#     if avg_factor is None:
+#         avg_factor = inds.numel() + 1e-6
+#     loss = generalized_iou_loss(pred[inds], target[inds])
+#
+#     return loss[None] / avg_factor
 
 
 @LOSSES.register_module
@@ -56,5 +58,5 @@ class GIoULoss(nn.Module):
         self.loss_weight = loss_weight
 
     def forward(self, pred, target, weight, *args, **kwargs):
-        loss = self.loss_weight * weighted_generalized_iou_loss(pred, target, weight, *args, **kwargs)
+        loss = self.loss_weight * generalized_iou_loss(pred, target, weight, *args, **kwargs)
         return loss

@@ -65,7 +65,7 @@ class HTCMaskScoringHead(HTCMaskHead):
 
     def forward(self, x, *arg, **kwargs):
         self.roi_feat = x
-        return super(HTCMaskScoringHead, self).forward(x, *arg, **kwargs, return_feat=False)
+        return super(HTCMaskScoringHead, self).forward(x, *arg, **kwargs)
 
     def get_target(self, sampling_results, gt_masks, rcnn_train_cfg):
         pos_proposals = [res.pos_bboxes for res in sampling_results]
@@ -104,14 +104,14 @@ class HTCMaskScoringHead(HTCMaskHead):
         mask_iou = mask_iou[inds, labels]   # [n_pos_roi]
 
         # mask_iou为bbox中的交集 / 整个图像中的并集
-        mask_pred[:] = mask_pred > 0  # inplace change
-        mask_ovr = mask_pred * mask_targets
+        mask_pred_ = (mask_pred > 0).float()  # a[:] = b is a's inplace change
+        mask_ovr = mask_pred_ * mask_targets
         mask_ovr_area = mask_ovr.sum(dim=[1, 2])
         mask_targets_full_area = mask_targets.sum(dim=[1, 2]) / self.mask_ratios
-        mask_union_area = mask_pred.sum(dim=[1, 2]) + mask_targets_full_area - mask_ovr_area
+        mask_union_area = mask_pred_.sum(dim=[1, 2]) + mask_targets_full_area - mask_ovr_area
 
-        value_0 = torch.zeros(mask_pred.shape[0], device=labels.device)
-        value_1 = torch.ones(mask_pred.shape[0], device=labels.device)
+        # value_0 = torch.zeros(mask_pred_.shape[0], device=labels.device)
+        # value_1 = torch.ones(mask_pred_.shape[0], device=labels.device)
         # mask_ovr_area = torch.max(mask_ovr_area, value_0)
         # mask_union_area = torch.max(mask_union_area, value_1)
         mask_ovr_area = mask_ovr_area.clamp(min=0)

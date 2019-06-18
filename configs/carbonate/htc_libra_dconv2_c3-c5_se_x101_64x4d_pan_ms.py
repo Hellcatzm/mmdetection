@@ -71,15 +71,12 @@ model = dict(
             #     type='SmoothL1Loss',
             #     beta=1.0,
             #     loss_weight=1.0)
-            # loss_bbox=dict(
-            #     type='BalancedL1Loss',
-            #     alpha=0.5,
-            #     gamma=1.5,
-            #     beta=1.0,
-            #     loss_weight=1.0)
             loss_bbox=dict(
-                type='GIoULoss',
-                loss_weight=1.0),
+                type='BalancedL1Loss',
+                alpha=0.5,
+                gamma=1.5,
+                beta=1.0,
+                loss_weight=1.0)
         ),
         dict(
             type='SharedFCBBoxHead',
@@ -98,16 +95,13 @@ model = dict(
             # loss_bbox=dict(
             #     type='SmoothL1Loss',
             #     beta=1.0,
-            #     loss_weight=1.0)
-            # loss_bbox=dict(
-            #     type='BalancedL1Loss',
-            #     alpha=0.5,
-            #     gamma=1.5,
-            #     beta=1.0,
-            #     loss_weight=1.0)
-            loss_bbox=dict(
-                type='GIoULoss',
-                loss_weight=1.0),
+            #     loss_weight=1.0),
+            loss_bbox = dict(
+                type='BalancedL1Loss',
+                alpha=0.5,
+                gamma=1.5,
+                beta=1.0,
+                loss_weight=1.0)
         ),
         dict(
             type='SharedFCBBoxHead',
@@ -126,16 +120,13 @@ model = dict(
             # loss_bbox=dict(
             #     type='SmoothL1Loss',
             #     beta=1.0,
-            #     loss_weight=1.0),
-            # loss_bbox = dict(
-            #     type='BalancedL1Loss',
-            #     alpha=0.5,
-            #     gamma=1.5,
-            #     beta=1.0,
             #     loss_weight=1.0)
             loss_bbox=dict(
-                type='GIoULoss',
-                loss_weight=1.0),
+                type='BalancedL1Loss',
+                alpha=0.5,
+                gamma=1.5,
+                beta=1.0,
+                loss_weight=1.0)
         )
     ],
     mask_roi_extractor=dict(
@@ -143,14 +134,32 @@ model = dict(
         roi_layer=dict(type='RoIAlign', out_size=14, sample_num=4),
         out_channels=256,
         featmap_strides=[4, 8, 16, 32]),
-    mask_head=dict(
-        type='HTCMaskHead',
-        num_convs=4,
-        in_channels=256,
-        conv_out_channels=256,
-        num_classes=3,
-        loss_mask=dict(
-            type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)),
+    mask_head=[
+        dict(
+            type='HTCMaskHead',
+            num_convs=4,
+            in_channels=256,
+            conv_out_channels=256,
+            num_classes=3,
+            loss_mask=dict(
+                type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)),
+        dict(
+            type='HTCMaskHead',
+            num_convs=4,
+            in_channels=256,
+            conv_out_channels=256,
+            num_classes=3,
+            loss_mask=dict(
+                type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)),
+        dict(
+            type='HTCMaskScoringHead',
+            num_convs=4,
+            in_channels=256,
+            conv_out_channels=256,
+            num_classes=3,
+            loss_mask=dict(
+                type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)),
+    ],
     semantic_roi_extractor=dict(
         type='SingleRoIExtractor',
         roi_layer=dict(type='RoIAlign', out_size=14, sample_num=4),
@@ -345,7 +354,7 @@ log_config = dict(
 total_epochs = 80
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_giou_carb'
-load_from = 'work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_giou_carb/latest.pth'
+work_dir = './work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_ms_carb'
+load_from = None
 resume_from = None
 workflow = [('train', 1)]

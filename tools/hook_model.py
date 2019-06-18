@@ -20,7 +20,7 @@ def backward_hook(module, grad_input, grad_output):
 
 HOOT_MODE = "train"  # "inference" or "train"
 ROOT_DIR = '/home/gttintern/mmdetection'
-CONFIG_NAME = 'configs/carbonate/htc_libra_dconv2_c3-c5_gc_x101_64x4d_pan.py'
+CONFIG_NAME = 'configs/carbonate/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_ms.py'
 
 config_file = os.path.join(ROOT_DIR, CONFIG_NAME)
 cfg = mmcv.Config.fromfile(config_file)

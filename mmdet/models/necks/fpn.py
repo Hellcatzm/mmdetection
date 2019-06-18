@@ -21,7 +21,7 @@ class FPN(nn.Module):
                  conv_cfg=None,
                  norm_cfg=None,
                  activation=None,
-                 with_panet=False):
+                 bottom_up_path=False):
         super(FPN, self).__init__()
         assert isinstance(in_channels, list)
         self.in_channels = in_channels
@@ -43,7 +43,7 @@ class FPN(nn.Module):
         self.end_level = end_level
         self.add_extra_convs = add_extra_convs
         self.extra_convs_on_inputs = extra_convs_on_inputs
-        self.with_panet = with_panet
+        self.bottom_up_path = bottom_up_path
 
         self.lateral_convs = nn.ModuleList()
         self.fpn_convs = nn.ModuleList()
@@ -70,7 +70,7 @@ class FPN(nn.Module):
             self.lateral_convs.append(l_conv)
             self.fpn_convs.append(fpn_conv)
 
-        if self.with_panet:
+        if self.bottom_up_path:
             self.pan_convs1 = nn.ModuleList()
             self.pan_convs2 = nn.ModuleList()
 
@@ -142,7 +142,7 @@ class FPN(nn.Module):
 
         # build outputs
         # part 1: from original levels
-        if self.with_panet:
+        if self.bottom_up_path:
             middle = [
                 self.fpn_convs[i](laterals[i]) for i in range(used_backbone_levels)
             ]

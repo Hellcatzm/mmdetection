@@ -19,8 +19,8 @@ def backward_hook(module, grad_input, grad_output):
 
 
 HOOT_MODE = "train"  # "inference" or "train"
-ROOT_DIR = '/home/hellcatzm/mmdetection'
-CONFIG_NAME = 'configs/carbonate/mask_rcnn_r101_fpn_1x.py'
+ROOT_DIR = '/home/gttintern/mmdetection'
+CONFIG_NAME = 'configs/carbonate/htc_libra_dconv2_c3-c5_gc_x101_64x4d_pan.py'
 
 config_file = os.path.join(ROOT_DIR, CONFIG_NAME)
 cfg = mmcv.Config.fromfile(config_file)
@@ -45,6 +45,8 @@ elif HOOT_MODE == "train":
                                            cfg.data.train.ann_file)
     cfg.data.train.img_prefix = os.path.join(ROOT_DIR,
                                              cfg.data.train.img_prefix)
+    cfg.data.train.seg_prefix = os.path.join(ROOT_DIR,
+                                             cfg.data.train.seg_prefix)
     dataset = get_dataset(cfg.data.train)
     dataloader = build_dataloader(
         dataset,
@@ -65,6 +67,8 @@ elif HOOT_MODE == "train":
                    gt_bboxes=[t.cuda() for t in batch_data['gt_bboxes'].data[0]],
                    gt_labels=[t.cuda() for t in batch_data['gt_labels'].data[0]],
                    gt_bboxes_ignore=batch_data['gt_bboxes_ignore'].data[0],
-                   gt_masks=[t for t in batch_data['gt_masks'].data[0]]  # 传入numpy数组即可
+                   gt_masks=[t for t in batch_data['gt_masks'].data[0]],  # 传入numpy数组即可
+                   gt_semantic_seg=batch_data['gt_semantic_seg'].data[0].cuda()
                    )
+
 

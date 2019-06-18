@@ -13,7 +13,7 @@ model = dict(
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=-1,
-        norm_cfg=dict(type='SyncBN', requires_grad=True),
+        norm_cfg=dict(type='BN', requires_grad=True),
         style='pytorch',
         dcn=dict(
             modulated=True,
@@ -26,9 +26,9 @@ model = dict(
         in_channels=[256, 512, 1024, 2048],
         out_channels=256,
         num_outs=5,
-        # norm_cfg=dict(type='SyncBN', requires_grad=True),
-        # activation="relu",
-        bottom_up_path=False),
+        norm_cfg=dict(type='BN', requires_grad=True),
+        activation="relu",
+        bottom_up_path=True),
         dict(
             type='BFP',
             in_channels=256,
@@ -71,12 +71,15 @@ model = dict(
             #     type='SmoothL1Loss',
             #     beta=1.0,
             #     loss_weight=1.0)
+            # loss_bbox=dict(
+            #     type='BalancedL1Loss',
+            #     alpha=0.5,
+            #     gamma=1.5,
+            #     beta=1.0,
+            #     loss_weight=1.0)
             loss_bbox=dict(
-                type='BalancedL1Loss',
-                alpha=0.5,
-                gamma=1.5,
-                beta=1.0,
-                loss_weight=1.0)
+                type='GIoULoss',
+                loss_weight=1.0),
         ),
         dict(
             type='SharedFCBBoxHead',
@@ -95,13 +98,16 @@ model = dict(
             # loss_bbox=dict(
             #     type='SmoothL1Loss',
             #     beta=1.0,
-            #     loss_weight=1.0),
-            loss_bbox = dict(
-                type='BalancedL1Loss',
-                alpha=0.5,
-                gamma=1.5,
-                beta=1.0,
-                loss_weight=1.0)
+            #     loss_weight=1.0)
+            # loss_bbox=dict(
+            #     type='BalancedL1Loss',
+            #     alpha=0.5,
+            #     gamma=1.5,
+            #     beta=1.0,
+            #     loss_weight=1.0)
+            loss_bbox=dict(
+                type='GIoULoss',
+                loss_weight=1.0),
         ),
         dict(
             type='SharedFCBBoxHead',
@@ -120,13 +126,16 @@ model = dict(
             # loss_bbox=dict(
             #     type='SmoothL1Loss',
             #     beta=1.0,
+            #     loss_weight=1.0),
+            # loss_bbox = dict(
+            #     type='BalancedL1Loss',
+            #     alpha=0.5,
+            #     gamma=1.5,
+            #     beta=1.0,
             #     loss_weight=1.0)
             loss_bbox=dict(
-                type='BalancedL1Loss',
-                alpha=0.5,
-                gamma=1.5,
-                beta=1.0,
-                loss_weight=1.0)
+                type='GIoULoss',
+                loss_weight=1.0),
         )
     ],
     mask_roi_extractor=dict(
@@ -336,7 +345,7 @@ log_config = dict(
 total_epochs = 80
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_fpn_carb'
+work_dir = './work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_giou_carb'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]

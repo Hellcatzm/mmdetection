@@ -112,8 +112,10 @@ class HTCMaskScoringHead(HTCMaskHead):
 
         value_0 = torch.zeros(mask_pred.shape[0], device=labels.device)
         value_1 = torch.ones(mask_pred.shape[0], device=labels.device)
-        mask_ovr_area = torch.max(mask_ovr_area, value_0)
-        mask_union_area = torch.max(mask_union_area, value_1)
+        # mask_ovr_area = torch.max(mask_ovr_area, value_0)
+        # mask_union_area = torch.max(mask_union_area, value_1)
+        mask_ovr_area = mask_ovr_area.clamp(min=0)
+        mask_union_area = mask_union_area.clamp(min=1)
         mask_iou_targets = mask_ovr_area / mask_union_area
         mask_iou_targets = mask_iou_targets.detach()  # [n_pos_roi]
 

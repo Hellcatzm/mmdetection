@@ -45,7 +45,7 @@ def mask_target_single(pos_proposals, pos_assigned_gt_inds, gt_masks, cfg, if_ma
             mask_targets.append(target)
 
             if if_mask_iou:
-                gt_area = np.sum(gt_mask)
+                gt_area = np.maximum(1, np.sum(gt_mask))
                 tar_area = np.sum(gt_mask[y1:y1 + h, x1:x1 + w])
                 mask_ratios.append(tar_area / gt_area)
 
@@ -61,3 +61,4 @@ def mask_target_single(pos_proposals, pos_assigned_gt_inds, gt_masks, cfg, if_ma
         return mask_targets, mask_ratios
     else:
         return mask_targets
+

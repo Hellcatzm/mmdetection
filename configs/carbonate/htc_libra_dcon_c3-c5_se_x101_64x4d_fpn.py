@@ -13,10 +13,10 @@ model = dict(
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=-1,
-        norm_cfg=dict(type='SyncBN', requires_grad=True),
+        norm_cfg=dict(type='BN', requires_grad=True),
         style='pytorch',
         dcn=dict(
-            modulated=True,
+            modulated=False,
             groups=64,
             deformable_groups=1,
             fallback_on_stride=False),
@@ -245,7 +245,7 @@ train_cfg = dict(
                 add_gt_as_proposals=True,
                 pos_sampler=dict(type='InstanceBalancedPosSampler'),
                 neg_sampler=dict(
-                    type='IoUBalancedNegSampler',
+                    type= 'IoUBalancedNegSampler',
                     floor=-1,
                     floor_thr=0,
                     num_bins=3)
@@ -336,7 +336,7 @@ log_config = dict(
 total_epochs = 80
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_fpn_carb'
+work_dir = './work_dirs/htc_libra_dcon_c3-c5_se_x101_64x4d_fpn_carb'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]

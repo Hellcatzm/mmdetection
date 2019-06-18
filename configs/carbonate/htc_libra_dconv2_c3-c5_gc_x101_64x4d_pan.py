@@ -1,34 +1,33 @@
 # model settings
+norm_cfg = dict(type='SyncBN', requires_grad=True)
+
 model = dict(
     type='HybridTaskCascade',
     num_stages=3,
-    pretrained='open-mmlab://resnext101_64x4d',
+    pretrained='modelzoo://resnet50',
     interleaved=True,
     mask_info_flow=True,
     backbone=dict(
-        type='SEResNeXt',
+        type='ResNet',
         depth=101,
-        groups=64,
-        base_width=4,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
-        frozen_stages=-1,
-        norm_cfg=dict(type='SyncBN', requires_grad=True),
+        frozen_stages=1,
         style='pytorch',
-        dcn=dict(
-            modulated=True,
-            groups=64,
-            deformable_groups=1,
-            fallback_on_stride=False),
-            stage_with_dcn=(False, True, True, True)),
+        gcb=dict(
+            ratio=1. / 16.,
+        ),
+        stage_with_gcb=(False, True, True, True),
+        norm_eval=False,
+        norm_cfg=norm_cfg),
     neck=[dict(
         type='FPN',
         in_channels=[256, 512, 1024, 2048],
         out_channels=256,
         num_outs=5,
-        # norm_cfg=dict(type='SyncBN', requires_grad=True),
-        # activation="relu",
-        bottom_up_path=False),
+        norm_cfg=norm_cfg,
+        activation="relu",
+        bottom_up_path=True),
         dict(
             type='BFP',
             in_channels=256,
@@ -77,6 +76,9 @@ model = dict(
                 gamma=1.5,
                 beta=1.0,
                 loss_weight=1.0)
+            # loss_bbox=dict(
+            #     type='GIoULoss',
+            #     loss_weight=1.0),
         ),
         dict(
             type='SharedFCBBoxHead',
@@ -102,6 +104,9 @@ model = dict(
                 gamma=1.5,
                 beta=1.0,
                 loss_weight=1.0)
+            # loss_bbox=dict(
+            #     type='GIoULoss',
+            #     loss_weight=1.0),
         ),
         dict(
             type='SharedFCBBoxHead',
@@ -127,6 +132,9 @@ model = dict(
                 gamma=1.5,
                 beta=1.0,
                 loss_weight=1.0)
+            # loss_bbox=dict(
+            #     type='GIoULoss',
+            #     loss_weight=1.0),
         )
     ],
     mask_roi_extractor=dict(
@@ -254,7 +262,7 @@ train_cfg = dict(
             pos_weight=-1,
             debug=False)
     ],
-    stage_loss_weights=[1, 0.5, 0.25])
+    stage_loss_weights=[1, 0.5, 0.25])  # 有意思，第一步权重最高
 test_cfg = dict(
     rpn=dict(
         nms_across_levels=False,
@@ -336,7 +344,7 @@ log_config = dict(
 total_epochs = 80
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_fpn_carb'
+work_dir = './work_dirs/htc_libra_dconv2_c3-c5_gc_x101_64x4d_pan_carb'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]

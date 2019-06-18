@@ -28,7 +28,7 @@ model = dict(
         num_outs=5,
         # norm_cfg=dict(type='SyncBN', requires_grad=True),
         # activation="relu",
-        with_panet=False),
+        bottom_up_path=False),
         dict(
             type='BFP',
             in_channels=256,
@@ -337,7 +337,7 @@ log_config = dict(
 total_epochs = 80
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/htc_libra_dconv_c3-c5_x101_64x4d_fpn_carb'
-load_from = './work_dirs/htc_libra_dconv_c3-c5_x101_64x4d_fpn_carb/epoch_8.pth'
+work_dir = './work_dirs/htc_libra_dcon_c3-c5_x101_64x4d_fpn_carb'
+load_from = './work_dirs/htc_libra_dcon_c3-c5_x101_64x4d_fpn_carb/epoch_1.pth'
 resume_from = None
 workflow = [('train', 1)]

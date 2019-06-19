@@ -1,4 +1,6 @@
 # model settings
+norm_cfg = dict(type='BN', requires_grad=True)
+
 model = dict(
     type='HybridTaskCascade',
     num_stages=3,
@@ -13,7 +15,7 @@ model = dict(
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=-1,
-        norm_cfg=dict(type='BN', requires_grad=True),
+        norm_cfg=norm_cfg,
         style='pytorch',
         dcn=dict(
             modulated=True,
@@ -26,7 +28,7 @@ model = dict(
         in_channels=[256, 512, 1024, 2048],
         out_channels=256,
         num_outs=5,
-        norm_cfg=dict(type='BN', requires_grad=True),
+        norm_cfg=norm_cfg,
         activation="relu",
         bottom_up_path=True),
         dict(

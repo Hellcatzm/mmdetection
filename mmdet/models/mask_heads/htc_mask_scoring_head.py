@@ -41,7 +41,7 @@ class MSIoUFeatureExtractor(nn.Module):
                 nn.init.constant_(m.bias, 0)
             if m in (self.fc1, self.fc2):
                 nn.init.kaiming_normal_(m.weight, a=1)
-                nn.init.constant(m.bias, 0)
+                nn.init.constant_(m.bias, 0)
         nn.init.normal_(self.fc3.weight, mean=0, std=0.01)
         nn.init.constant_(self.fc3.bias, 0)
 

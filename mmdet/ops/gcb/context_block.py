@@ -17,6 +17,13 @@ class ContextBlock(nn.Module):
                  ratio,
                  pooling_type='att',
                  fusion_types=('channel_add', )):
+        """
+        当pooling_type不为'att'且fusion_types为('channel_mul', )block退化为seblock
+        :param inplanes:
+        :param ratio:
+        :param pooling_type:
+        :param fusion_types:
+        """
         super(ContextBlock, self).__init__()
         assert pooling_type in ['avg', 'att']
         assert isinstance(fusion_types, (list, tuple))
@@ -92,11 +99,11 @@ class ContextBlock(nn.Module):
         context = self.spatial_pool(x)
 
         out = x
-        if self.channel_mul_conv is not None:
+        if self.channel_mul_conv is not None:  # SE
             # [N, C, 1, 1]
             channel_mul_term = torch.sigmoid(self.channel_mul_conv(context))
             out = out * channel_mul_term
-        if self.channel_add_conv is not None:
+        if self.channel_add_conv is not None:  # GC
             # [N, C, 1, 1]
             channel_add_term = self.channel_add_conv(context)
             out = out + channel_add_term

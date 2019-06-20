@@ -10,19 +10,19 @@ from ..utils import build_conv_layer, build_norm_layer
 
 
 class SEModule(nn.Module):
-    def __init__(self, channels, reduction, conv_cfg=None):
+    def __init__(self, channels, ratio, conv_cfg=None):
         super(SEModule, self).__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.conv1 = build_conv_layer(
             conv_cfg,
             channels,
-            channels // reduction,
+            int(channels * ratio),
             kernel_size=1,
             padding=0)
         self.relu = nn.ReLU(inplace=True)
         self.conv2 = build_conv_layer(
             conv_cfg,
-            channels // reduction,
+            int(channels * ratio),
             channels,
             kernel_size=1,
             padding=0)
@@ -47,7 +47,7 @@ class Bottleneck(_Bottleneck):
         """
         super(Bottleneck, self).__init__(*args, **kwargs)
 
-        self.se_module = SEModule(self.planes * self.expansion, reduction=16)
+        self.se_module = SEModule(self.planes * self.expansion, ratio=16)
 
         if groups == 1:
             width = self.planes

@@ -1,5 +1,5 @@
 # model settings
-norm_cfg = dict(type='BN', requires_grad=True)
+norm_cfg = dict(type='SyncBN', requires_grad=True)
 
 model = dict(
     type='HybridTaskCascade',
@@ -22,7 +22,7 @@ model = dict(
             groups=64,
             deformable_groups=1,
             fallback_on_stride=False),
-            stage_with_dcn=(False, True, True, True)),
+        stage_with_dcn=(False, True, True, True)),
     neck=[dict(
         type='FPN',
         in_channels=[256, 512, 1024, 2048],

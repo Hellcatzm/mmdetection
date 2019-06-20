@@ -4,16 +4,24 @@ norm_cfg = dict(type='SyncBN', requires_grad=True)
 model = dict(
     type='HybridTaskCascade',
     num_stages=3,
-    pretrained='modelzoo://resnet50',
+    pretrained='open-mmlab://resnext101_64x4d',
     interleaved=True,
     mask_info_flow=True,
     backbone=dict(
-        type='ResNet',
+        type='ResNeXt',
         depth=101,
+        groups=64,
+        base_width=4,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
-        frozen_stages=1,
+        frozen_stages=-1,
         style='pytorch',
+        dcn=dict(
+            modulated=True,
+            groups=64,
+            deformable_groups=1,
+            fallback_on_stride=False),
+        stage_with_dcn=(False, True, True, True),
         gcb=dict(
             ratio=1. / 16.,
         ),

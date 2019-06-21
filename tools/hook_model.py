@@ -23,11 +23,11 @@ def backward_hook(module, grad_input, grad_output):
 
 HOOT_MODE = "train"  # "inference" or "train"
 ROOT_DIR = '/home/gttintern/mmdetection'
-CONFIG_NAME = 'configs/carbonate/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_ms.py'
+CONFIG_NAME = 'configs/carbonate/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_dice.py'
 
 config_file = os.path.join(ROOT_DIR, CONFIG_NAME)
 cfg = mmcv.Config.fromfile(config_file)
-checkpoint_file = os.path.join(os.path.join(ROOT_DIR, cfg.work_dir), 'latest.pth')
+checkpoint_file = os.path.join(os.path.join(ROOT_DIR, cfg.work_dir), 'epoch_24.pth')
 
 if HOOT_MODE == "inference":
     model = init_detector(config_file, checkpoint_file, device='cuda:0')
@@ -77,6 +77,7 @@ elif HOOT_MODE == "train":
                    )
 
     ms_test_mode = ["ms_target", "ms_head", None][1]
+    # 如需调试，记得取消htc_mask_scoring_head的98、135行注释
     if ms_test_mode == "ms_target":
         # htc_mask_scoring_head 测试
         mask_pred = model.mask_head[-1].mask_pred.detach().cpu().numpy()
@@ -113,7 +114,7 @@ elif HOOT_MODE == "train":
         pred_slice_pooled = mask_pred[:, None, :, :]  # [n_pos_roi, 1, h/2, w/2]
         mask_iou = model.mask_head[-1].mask_iou_head(model.mask_head[-1].roi_feat, pred_slice_pooled)
         mask_iou = mask_iou.squeeze()
-        print(mask_iou)
+        print(mask_iou[:, labels])
     else:
         pass
 

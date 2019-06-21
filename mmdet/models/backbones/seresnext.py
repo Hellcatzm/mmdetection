@@ -47,7 +47,7 @@ class Bottleneck(_Bottleneck):
         """
         super(Bottleneck, self).__init__(*args, **kwargs)
 
-        self.se_module = SEModule(self.planes * self.expansion, ratio=16)
+        self.se_module = SEModule(self.planes * self.expansion, ratio=1/16)
 
         if groups == 1:
             width = self.planes

@@ -143,7 +143,7 @@ model = dict(
         conv_out_channels=256,
         num_classes=3,
         loss_mask=dict(
-            type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)),
+            type='SoftDiceLoss', loss_weight=1.0)),
     semantic_roi_extractor=dict(
         type='SingleRoIExtractor',
         roi_layer=dict(type='RoIAlign', out_size=14, sample_num=4),
@@ -338,7 +338,7 @@ log_config = dict(
 total_epochs = 25
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_carb'
+work_dir = './work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_dice_carb'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]

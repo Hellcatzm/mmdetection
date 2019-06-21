@@ -22,7 +22,7 @@ model = dict(
             groups=64,
             deformable_groups=1,
             fallback_on_stride=False),
-            stage_with_dcn=(False, True, True, True)),
+        stage_with_dcn=(False, True, True, True)),
     neck=[dict(
         type='FPN',
         in_channels=[256, 512, 1024, 2048],
@@ -81,7 +81,7 @@ model = dict(
             #     loss_weight=1.0)
             loss_bbox=dict(
                 type='GIoULoss',
-                loss_weight=1.0),
+                loss_weight=1.0)
         ),
         dict(
             type='SharedFCBBoxHead',
@@ -109,7 +109,7 @@ model = dict(
             #     loss_weight=1.0)
             loss_bbox=dict(
                 type='GIoULoss',
-                loss_weight=1.0),
+                loss_weight=1.0)
         ),
         dict(
             type='SharedFCBBoxHead',
@@ -137,7 +137,7 @@ model = dict(
             #     loss_weight=1.0)
             loss_bbox=dict(
                 type='GIoULoss',
-                loss_weight=1.0),
+                loss_weight=1.0)
         )
     ],
     mask_roi_extractor=dict(
@@ -344,10 +344,10 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 80
+total_epochs = 25
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_giou_carb'
-load_from = 'work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_giou_carb/latest.pth'
+load_from = None
 resume_from = None
 workflow = [('train', 1)]

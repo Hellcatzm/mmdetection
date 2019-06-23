@@ -335,7 +335,7 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 25
+total_epochs = 26
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_dice_carb'

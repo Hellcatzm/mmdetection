@@ -16,10 +16,11 @@ def soft_dice_loss(pred, target, label, reduction='mean', avg_factor=None):
     num_rois = pred.size()[0]
     inds = torch.arange(0, num_rois, dtype=torch.long, device=pred.device)
     pred_slice = pred[inds, label].squeeze(1)
+    pred_slice = torch.sigmoid(pred_slice)
 
     ovr = (pred_slice * target).sum(dim=[1, 2])
-    union = (pred_slice**2 + target**2).sum(dim=[1, 2]).clamp(1e-5)
-    return (1 - ovr*2 / union).mean()[None]
+    union = (pred_slice + target).sum(dim=[1, 2]).clamp(1e-10)
+    return (1 - (2*ovr/union).sum()/num_rois)[None]
 
 
 @LOSSES.register_module

@@ -24,7 +24,7 @@ def generalized_iou_loss(pred, target):
     unions = area1 + area2 - overlap
     ious = torch.where(overlap == 0.0,
                        torch.zeros_like(overlap, device=overlap.device), overlap / unions)
-    gious = ious - (convex - unions) / convex.clamp(min=1)  # [n]
+    gious = ious - (convex - unions) / convex.clamp(min=1e-10)  # [n]
 
     return 1 - gious  # (1 - gious).sum()
 

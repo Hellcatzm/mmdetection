@@ -8,13 +8,14 @@ model = dict(
     interleaved=True,
     mask_info_flow=True,
     backbone=dict(
-        type='SEResNeXt',
+        type='ResNeXt',
         depth=101,
         groups=64,
         base_width=4,
         num_stages=4,
         out_indices=(0, 1, 2, 3),
         frozen_stages=-1,
+        norm_eval=False,
         norm_cfg=norm_cfg,
         style='pytorch',
         dcn=dict(
@@ -22,7 +23,13 @@ model = dict(
             groups=64,
             deformable_groups=1,
             fallback_on_stride=False),
-        stage_with_dcn=(False, True, True, True)),
+        stage_with_dcn=(False, True, True, True),
+        gcb=dict(
+            ratio=1. / 16.,
+            pooling_type='avg',
+            fusion_types=('channel_mul',)
+        ),
+        stage_with_gcb=(False, True, True, True)),
     neck=[dict(
         type='FPN',
         in_channels=[256, 512, 1024, 2048],
@@ -79,6 +86,9 @@ model = dict(
                 gamma=1.5,
                 beta=1.0,
                 loss_weight=1.0)
+            # loss_bbox=dict(
+            #     type='GIoULoss',
+            #     loss_weight=1.0),
         ),
         dict(
             type='SharedFCBBoxHead',
@@ -104,6 +114,9 @@ model = dict(
                 gamma=1.5,
                 beta=1.0,
                 loss_weight=1.0)
+            # loss_bbox=dict(
+            #     type='GIoULoss',
+            #     loss_weight=1.0),
         ),
         dict(
             type='SharedFCBBoxHead',
@@ -129,6 +142,9 @@ model = dict(
                 gamma=1.5,
                 beta=1.0,
                 loss_weight=1.0)
+            # loss_bbox=dict(
+            #     type='GIoULoss',
+            #     loss_weight=1.0),
         )
     ],
     mask_roi_extractor=dict(
@@ -136,32 +152,14 @@ model = dict(
         roi_layer=dict(type='RoIAlign', out_size=14, sample_num=4),
         out_channels=256,
         featmap_strides=[4, 8, 16, 32]),
-    mask_head=[
-        dict(
-            type='HTCMaskHead',
-            num_convs=4,
-            in_channels=256,
-            conv_out_channels=256,
-            num_classes=3,
-            loss_mask=dict(
-                type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)),
-        dict(
-            type='HTCMaskHead',
-            num_convs=4,
-            in_channels=256,
-            conv_out_channels=256,
-            num_classes=3,
-            loss_mask=dict(
-                type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)),
-        dict(
-            type='HTCMaskScoringHead',
-            num_convs=4,
-            in_channels=256,
-            conv_out_channels=256,
-            num_classes=3,
-            loss_mask=dict(
-                type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)),
-    ],
+    mask_head=dict(
+        type='HTCMaskHead',
+        num_convs=4,
+        in_channels=256,
+        conv_out_channels=256,
+        num_classes=3,
+        loss_mask=dict(
+            type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)),
     semantic_roi_extractor=dict(
         type='SingleRoIExtractor',
         roi_layer=dict(type='RoIAlign', out_size=14, sample_num=4),
@@ -274,7 +272,7 @@ train_cfg = dict(
             pos_weight=-1,
             debug=False)
     ],
-    stage_loss_weights=[1, 0.5, 0.25])
+    stage_loss_weights=[1, 0.5, 0.25])  # 有意思，第一步权重最高
 test_cfg = dict(
     rpn=dict(
         nms_across_levels=False,
@@ -356,7 +354,7 @@ log_config = dict(
 total_epochs = 26
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_ms_carb'
+work_dir = './work_dirs/htc_libra_dconv2_c3-c5_gc_x101_64x4d_pan_carb'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]

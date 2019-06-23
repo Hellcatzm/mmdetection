@@ -16,7 +16,7 @@ class ContextBlock(nn.Module):
                  inplanes,
                  ratio,
                  pooling_type='att',
-                 fusion_types=('channel_add', )):
+                 fusion_types=('channel_add',)):
         """
         当pooling_type不为'att'且fusion_types为('channel_mul', )block退化为seblock
         :param inplanes:

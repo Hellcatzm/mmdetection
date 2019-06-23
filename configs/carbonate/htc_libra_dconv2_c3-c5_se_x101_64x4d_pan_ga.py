@@ -38,17 +38,41 @@ model = dict(
             refine_level=2,
             refine_type='conv')],
     rpn_head=dict(
-        type='RPNHead',
+        type='GARPNHead',
         in_channels=256,
         feat_channels=256,
-        anchor_scales=[4],  # scale*stride为边长基准
-        anchor_ratios=[0.5, 1.0, 2.0],
+        octave_base_scale=8,
+        scales_per_octave=3,
+        octave_ratios=[0.5, 1.0, 2.0],
         anchor_strides=[4, 8, 16, 32, 64],
-        target_means=[.0, .0, .0, .0],
-        target_stds=[1.0, 1.0, 1.0, 1.0],
+        anchor_base_sizes=None,
+        anchoring_means=[.0, .0, .0, .0],
+        anchoring_stds=[0.07, 0.07, 0.14, 0.14],
+        target_means=(.0, .0, .0, .0),
+        target_stds=[0.07, 0.07, 0.11, 0.11],
+        loc_filter_thr=0.01,
+        loss_loc=dict(
+            type='FocalLoss',
+            use_sigmoid=True,
+            gamma=2.0,
+            alpha=0.25,
+            loss_weight=1.0),
+        loss_shape=dict(type='BoundedIoULoss', beta=0.2, loss_weight=1.0),
         loss_cls=dict(
             type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
-        loss_bbox=dict(type='SmoothL1Loss', beta=1.0 / 9.0, loss_weight=1.0)),
+        loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0)),
+    # rpn_head=dict(
+    #     type='RPNHead',
+    #     in_channels=256,
+    #     feat_channels=256,
+    #     anchor_scales=[4],  # scale*stride为边长基准
+    #     anchor_ratios=[0.5, 1.0, 2.0],
+    #     anchor_strides=[4, 8, 16, 32, 64],
+    #     target_means=[.0, .0, .0, .0],
+    #     target_stds=[1.0, 1.0, 1.0, 1.0],
+    #     loss_cls=dict(
+    #         type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0),
+    #     loss_bbox=dict(type='SmoothL1Loss', beta=1.0 / 9.0, loss_weight=1.0)),
     bbox_roi_extractor=dict(
         type='SingleRoIExtractor',
         roi_layer=dict(type='RoIAlign', out_size=7, sample_num=4),
@@ -97,8 +121,8 @@ model = dict(
             # loss_bbox=dict(
             #     type='SmoothL1Loss',
             #     beta=1.0,
-            #     loss_weight=1.0),
-            loss_bbox = dict(
+            #     loss_weight=1.0)
+            loss_bbox=dict(
                 type='BalancedL1Loss',
                 alpha=0.5,
                 gamma=1.5,
@@ -136,32 +160,14 @@ model = dict(
         roi_layer=dict(type='RoIAlign', out_size=14, sample_num=4),
         out_channels=256,
         featmap_strides=[4, 8, 16, 32]),
-    mask_head=[
-        dict(
-            type='HTCMaskHead',
-            num_convs=4,
-            in_channels=256,
-            conv_out_channels=256,
-            num_classes=3,
-            loss_mask=dict(
-                type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)),
-        dict(
-            type='HTCMaskHead',
-            num_convs=4,
-            in_channels=256,
-            conv_out_channels=256,
-            num_classes=3,
-            loss_mask=dict(
-                type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)),
-        dict(
-            type='HTCMaskScoringHead',
-            num_convs=4,
-            in_channels=256,
-            conv_out_channels=256,
-            num_classes=3,
-            loss_mask=dict(
-                type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)),
-    ],
+    mask_head=dict(
+        type='HTCMaskHead',
+        num_convs=4,
+        in_channels=256,
+        conv_out_channels=256,
+        num_classes=3,
+        loss_mask=dict(
+            type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)),
     semantic_roi_extractor=dict(
         type='SingleRoIExtractor',
         roi_layer=dict(type='RoIAlign', out_size=14, sample_num=4),
@@ -181,6 +187,18 @@ model = dict(
 train_cfg = dict(
     # rpn_head->rpn_propose->rpn_assigner->rpn_samper
     rpn=dict(
+        ga_assigner=dict(
+            type='ApproxMaxIoUAssigner',
+            pos_iou_thr=0.7,
+            neg_iou_thr=0.3,
+            min_pos_iou=0.3,
+            ignore_iof_thr=-1),
+        ga_sampler=dict(
+            type='RandomSampler',
+            num=256,
+            pos_fraction=0.5,
+            neg_pos_ub=-1,
+            add_gt_as_proposals=False),
         assigner=dict(
             type='MaxIoUAssigner',
             pos_iou_thr=0.7,
@@ -195,6 +213,8 @@ train_cfg = dict(
             add_gt_as_proposals=False),
         allowed_border=0,
         pos_weight=-1,
+        center_ratio=0.2,
+        ignore_ratio=0.5,
         debug=False),
     rpn_proposal=dict(
         nms_across_levels=False,
@@ -356,7 +376,7 @@ log_config = dict(
 total_epochs = 26
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_ms_carb'
+work_dir = './work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_ga_carb'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]

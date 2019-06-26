@@ -1,5 +1,5 @@
 # model settings
-norm_cfg = dict(type='BN', requires_grad=True)
+norm_cfg = dict(type='SyncBN', requires_grad=True)
 
 model = dict(
     type='HybridTaskCascade',
@@ -73,11 +73,15 @@ model = dict(
             #     type='SmoothL1Loss',
             #     beta=1.0,
             #     loss_weight=1.0)
+            # loss_bbox=dict(
+            #     type='BalancedL1Loss',
+            #     alpha=0.5,
+            #     gamma=1.5,
+            #     beta=1.0,
+            #     loss_weight=1.0)
             loss_bbox=dict(
-                type='BalancedL1Loss',
-                alpha=0.5,
-                gamma=1.5,
-                beta=1.0,
+                type='GIoULoss',
+                mode='IoU',
                 loss_weight=1.0)
         ),
         dict(
@@ -98,11 +102,15 @@ model = dict(
             #     type='SmoothL1Loss',
             #     beta=1.0,
             #     loss_weight=1.0)
+            # loss_bbox=dict(
+            #     type='BalancedL1Loss',
+            #     alpha=0.5,
+            #     gamma=1.5,
+            #     beta=1.0,
+            #     loss_weight=1.0)
             loss_bbox=dict(
-                type='BalancedL1Loss',
-                alpha=0.5,
-                gamma=1.5,
-                beta=1.0,
+                type='GIoULoss',
+                mode='IoU',
                 loss_weight=1.0)
         ),
         dict(
@@ -122,12 +130,16 @@ model = dict(
             # loss_bbox=dict(
             #     type='SmoothL1Loss',
             #     beta=1.0,
+            #     loss_weight=1.0),
+            # loss_bbox = dict(
+            #     type='BalancedL1Loss',
+            #     alpha=0.5,
+            #     gamma=1.5,
+            #     beta=1.0,
             #     loss_weight=1.0)
             loss_bbox=dict(
-                type='BalancedL1Loss',
-                alpha=0.5,
-                gamma=1.5,
-                beta=1.0,
+                type='GIoULoss',
+                mode='IoU',
                 loss_weight=1.0)
         )
     ],
@@ -338,7 +350,7 @@ log_config = dict(
 total_epochs = 26
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_carb'
+work_dir = './work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_giou_carb'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]

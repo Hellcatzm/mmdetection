@@ -5,7 +5,7 @@ from .utils import weighted_loss
 
 
 @weighted_loss
-def generalized_iou_loss(pred, target):
+def generalized_iou_loss(pred, target, mode="GIoU"):
     assert pred.size() == target.size() and target.numel() > 0
 
     area1 = (pred[:, 2] - pred[:, 0] + 1) * (pred[:, 3] - pred[:, 1] + 1)
@@ -22,11 +22,14 @@ def generalized_iou_loss(pred, target):
     convex = convex_wh[:, 0] * convex_wh[:, 1]
 
     unions = area1 + area2 - overlap
-    ious = torch.where(overlap == 0.0,
-                       torch.zeros_like(overlap, device=overlap.device), overlap / unions)
-    gious = ious - (convex - unions) / convex.clamp(min=1e-10)  # [n]
-
-    return 1 - gious  # (1 - gious).sum()
+    ious = overlap / unions
+    if mode == "GIoU":
+        gious = ious - (convex - unions) / convex.clamp(min=1e-10)  # [n]
+        return 1 - gious  # (1 - gious).sum()
+    elif mode == "IoU":
+        return 1 - ious
+    else:
+        raise NotImplementedError
 
 
 # def weighted_generalized_iou_loss(pred,
@@ -54,11 +57,12 @@ def generalized_iou_loss(pred, target):
 @LOSSES.register_module
 class GIoULoss(nn.Module):
 
-    def __init__(self, loss_weight=1.0):
+    def __init__(self, loss_weight=1.0, mode="GIoU"):
         super(GIoULoss, self).__init__()
+        self.mode = mode  # ("GIoU, IoU")
         self.loss_weight = loss_weight
 
-    def forward(self, pred, target, weight, *args, **kwargs):
+    def forward(self, pred, target, weight, avg_factor=None, **kwargs):
         weight = weight[:, 0]
-        loss = self.loss_weight * generalized_iou_loss(pred, target, weight, *args, **kwargs)
+        loss = self.loss_weight * generalized_iou_loss(pred, target, weight, mode=self.mode, **kwargs)
         return loss

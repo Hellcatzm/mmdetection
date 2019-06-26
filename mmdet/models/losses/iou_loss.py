@@ -81,6 +81,7 @@ class IoULoss(nn.Module):
     def forward(self, pred, target, weight=None, avg_factor=None, **kwargs):
         if weight is not None and not torch.any(weight > 0):
             return (pred * weight).sum()  # 0
+        weight = weight[:, 0]
         loss = self.loss_weight * iou_loss(
             pred,
             target,

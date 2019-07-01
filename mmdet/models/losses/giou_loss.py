@@ -16,15 +16,25 @@ def generalized_iou_loss(pred, target, mode="GIoU"):
     overlap_wh = (overlap_rb - overlap_lt + 1).clamp(min=0)
     overlap = overlap_wh[:, 0] * overlap_wh[:, 1]
 
-    convex_lt = torch.min(pred[:, :2], target[:, :2])
-    convex_rb = torch.max(pred[:, 2:], target[:, 2:])
-    convex_wh = (convex_rb - convex_lt + 1).clamp(min=0)
-    convex = convex_wh[:, 0] * convex_wh[:, 1]
-
     unions = area1 + area2 - overlap
     ious = overlap / unions
     if mode == "GIoU":
-        gious = ious - (convex - unions) / convex.clamp(min=1e-10)  # [n]
+        convex_lt = torch.min(pred[:, :2], target[:, :2])
+        convex_rb = torch.max(pred[:, 2:], target[:, 2:])
+        convex_wh = (convex_rb - convex_lt + 1).clamp(min=0)
+        convex = convex_wh[:, 0] * convex_wh[:, 1]
+
+        gious = ious - (convex - unions) / convex  # [n]
+        if (1 - gious).mean()<-100:
+            import numpy as np
+            np.save('ious.npy', ious.cpu().detach().numpy())
+            np.save('convex.npy', convex.cpu().detach().numpy())
+            np.save('unions.npy', unions.cpu().detach().numpy())
+            np.save('area1.npy', area1.cpu().detach().numpy())
+            np.save('area2.npy', area2.cpu().detach().numpy())
+            np.save('overlap.npy', overlap.cpu().detach().numpy())
+            np.save('pred.npy', pred.cpu().detach().numpy())
+            np.save('target.npy', target.cpu().detach().numpy())
         return 1 - gious  # (1 - gious).sum()
     elif mode == "IoU":
         return 1 - ious

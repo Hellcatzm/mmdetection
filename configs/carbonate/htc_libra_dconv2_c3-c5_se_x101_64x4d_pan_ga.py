@@ -30,13 +30,7 @@ model = dict(
         num_outs=5,
         norm_cfg=norm_cfg,
         activation="relu",
-        bottom_up_path=True),
-        dict(
-            type='BFP',
-            in_channels=256,
-            num_levels=5,
-            refine_level=2,
-            refine_type='conv')],
+        bottom_up_path=False)],  # 为GA节省显存
     rpn_head=dict(
         type='GARPNHead',
         in_channels=256,

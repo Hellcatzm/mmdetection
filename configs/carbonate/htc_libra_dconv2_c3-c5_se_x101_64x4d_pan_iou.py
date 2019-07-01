@@ -350,7 +350,7 @@ log_config = dict(
 total_epochs = 26
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_giou_carb'
+work_dir = './work_dirs/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_iou_carb'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]

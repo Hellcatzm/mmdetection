@@ -42,16 +42,18 @@ class HybridTaskCascade(CascadeRCNN):
     def _bbox_forward_train(self,
                             stage,
                             x,
-                            sampling_results,
-                            gt_bboxes,
-                            gt_labels,
+                            sampling_results,  # [images]
+                            gt_bboxes,         # [images, 4]
+                            gt_labels,         # [images]
                             rcnn_train_cfg,
                             semantic_feat=None):
-        rois = bbox2roi([res.bboxes for res in sampling_results])
+        # 此处注意,每个res对应一张图片,即sampling_results长度和特征batch_size一致
+        rois = bbox2roi([res.bboxes for res in sampling_results])  # [images*proposal_pre_img, 5]
         bbox_roi_extractor = self.bbox_roi_extractor[stage]
         bbox_head = self.bbox_head[stage]
         bbox_feats = bbox_roi_extractor(x[:bbox_roi_extractor.num_inputs],
-                                        rois)
+                                        rois)  # rois携带隶属img的信息
+
         # semantic feature fusion
         # element-wise sum for original features and pooled semantic features
         if self.with_semantic and 'bbox' in self.semantic_fusion:
@@ -64,8 +66,7 @@ class HybridTaskCascade(CascadeRCNN):
 
         cls_score, bbox_pred = bbox_head(bbox_feats)
 
-        bbox_targets = bbox_head.get_target(sampling_results, gt_bboxes,
-                                            gt_labels, rcnn_train_cfg)
+        bbox_targets = bbox_head.get_target(sampling_results, rcnn_train_cfg)
         loss_bbox = bbox_head.loss(cls_score, bbox_pred, *bbox_targets)
         return loss_bbox, rois, bbox_targets, bbox_pred
 
@@ -169,6 +170,9 @@ class HybridTaskCascade(CascadeRCNN):
         # RPN part, the same as normal two-stage detectors
         if self.with_rpn:
             rpn_outs = self.rpn_head(x)
+            # [list: num_levels, [n, anchors*class, h, w]]
+            # [list: num_levels, [n, anchors*4, h, w]]
+
             rpn_loss_inputs = rpn_outs + (gt_bboxes, img_meta,
                                           self.train_cfg.rpn)
             rpn_losses = self.rpn_head.loss(
@@ -178,7 +182,7 @@ class HybridTaskCascade(CascadeRCNN):
             proposal_cfg = self.train_cfg.get('rpn_proposal',
                                               self.test_cfg.rpn)
             proposal_inputs = rpn_outs + (img_meta, proposal_cfg)
-            proposal_list = self.rpn_head.get_bboxes(*proposal_inputs)
+            proposal_list = self.rpn_head.get_bboxes(*proposal_inputs)  # [list(num imgs) [2000(配置文件指定), 5]]
         else:
             proposal_list = proposals
 
@@ -206,7 +210,7 @@ class HybridTaskCascade(CascadeRCNN):
 
             for j in range(num_imgs):
                 assign_result = bbox_assigner.assign(
-                    proposal_list[j], gt_bboxes[j], gt_bboxes_ignore[j],
+                    proposal_list[j], gt_bboxes[j], gt_bboxes_ignore[j], # <-----gt
                     gt_labels[j])
                 sampling_result = bbox_sampler.sample(
                     assign_result,
@@ -235,7 +239,7 @@ class HybridTaskCascade(CascadeRCNN):
                     pos_is_gts = [res.pos_is_gt for res in sampling_results]
                     with torch.no_grad():
                         proposal_list = self.bbox_head[i].refine_bboxes(
-                            rois, roi_labels, bbox_pred, pos_is_gts, img_meta)
+                            rois,  roi_labels, bbox_pred, pos_is_gts, img_meta)
                         # re-assign and sample 512 RoIs from 512 RoIs
                         sampling_results = []
                         for j in range(num_imgs):

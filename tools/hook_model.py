@@ -8,6 +8,9 @@ from mmdet.models import build_detector
 from mmdet.apis import init_detector, inference_detector
 from mmdet.datasets import get_dataset, build_dataloader
 import matplotlib.pyplot as plt
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+
 
 def forward_hook(module, data_input, data_output):
     """register_forward_hook(hook)"""
@@ -21,46 +24,49 @@ def backward_hook(module, grad_input, grad_output):
     print(grad_output.data.shape)
 
 
-HOOT_MODE = "train"  # "inference" or "train"
+HOOT_MODE = "inference"  # "inference" or "train"
 ROOT_DIR = '/home/gttintern/mmdetection'
-CONFIG_NAME = 'configs/carbonate/htc_libra_dconv2_c3-c5_se_x101_64x4d_pan_dice.py'
+CONFIG_NAME = 'configs/carbonate/htc_trident.py'
 
 config_file = os.path.join(ROOT_DIR, CONFIG_NAME)
 cfg = mmcv.Config.fromfile(config_file)
-checkpoint_file = os.path.join(os.path.join(ROOT_DIR, cfg.work_dir), 'epoch_24.pth')
+
+model = build_detector(
+        cfg.model, train_cfg=cfg.train_cfg, test_cfg=cfg.test_cfg).cuda()
+# checkpoint = load_checkpoint(model, checkpoint_file, map_location='cpu')
+
+cfg.data.train.ann_file = os.path.join(ROOT_DIR,
+                                       cfg.data.train.ann_file)
+cfg.data.train.img_prefix = os.path.join(ROOT_DIR,
+                                         cfg.data.train.img_prefix)
+cfg.data.train.seg_prefix = os.path.join(ROOT_DIR,
+                                         cfg.data.train.seg_prefix)
+dataset = get_dataset(cfg.data.train)
+dataloader = build_dataloader(
+    dataset,
+    imgs_per_gpu=1,
+    workers_per_gpu=cfg.data.workers_per_gpu,
+    num_gpus=1,
+    dist=False)
+model.CLASSES = dataset.CLASSES
+batch_data = next(iter(dataloader))
+
 
 if HOOT_MODE == "inference":
-    model = init_detector(config_file, checkpoint_file, device='cuda:0')
-    img = 'data/carbonate/val_images/carbonate23.tif'
-
+    model.eval()
     #_____________________________________________________________________
     """
     在感兴趣的层注册钩子查看数据流
     """
     # _____________________________________________________________________
+    with torch.no_grad():
+        result = model(return_loss=False,
+                       rescale=False,
+                       img=[batch_data['img'].data[0].cuda()],
+                       img_meta=[batch_data['img_meta'].data[0]],
+                       )
 
-    result = inference_detector(model, img)
 elif HOOT_MODE == "train":
-    model = build_detector(
-        cfg.model, train_cfg=cfg.train_cfg, test_cfg=cfg.test_cfg).cuda()
-    # checkpoint = load_checkpoint(model, checkpoint_file, map_location='cpu')
-
-    cfg.data.train.ann_file = os.path.join(ROOT_DIR,
-                                           cfg.data.train.ann_file)
-    cfg.data.train.img_prefix = os.path.join(ROOT_DIR,
-                                             cfg.data.train.img_prefix)
-    cfg.data.train.seg_prefix = os.path.join(ROOT_DIR,
-                                             cfg.data.train.seg_prefix)
-    dataset = get_dataset(cfg.data.train)
-    dataloader = build_dataloader(
-        dataset,
-        imgs_per_gpu=1,
-        workers_per_gpu=cfg.data.workers_per_gpu,
-        num_gpus=1,
-        dist=False)
-    model.CLASSES = dataset.CLASSES
-    batch_data = next(iter(dataloader))
-
     # _____________________________________________________________________
     """
     在感兴趣的层注册钩子查看数据流
@@ -76,7 +82,7 @@ elif HOOT_MODE == "train":
                    gt_semantic_seg=batch_data['gt_semantic_seg'].data[0].cuda()
                    )
 
-    ms_test_mode = ["ms_target", "ms_head", None][1]
+    ms_test_mode = ["ms_target", "ms_head", None][2]
     # 如需调试，记得取消htc_mask_scoring_head的98、135行注释
     if ms_test_mode == "ms_target":
         # htc_mask_scoring_head 测试
@@ -117,6 +123,3 @@ elif HOOT_MODE == "train":
         print(mask_iou[:, labels])
     else:
         pass
-
-
-

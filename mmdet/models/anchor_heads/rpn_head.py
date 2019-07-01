@@ -35,10 +35,10 @@ class RPNHead(AnchorHead):
         return rpn_cls_score, rpn_bbox_pred
 
     def loss(self,
-             cls_scores,
-             bbox_preds,
-             gt_bboxes,
-             img_metas,
+             cls_scores,  # [[n, anchors, h, w]]
+             bbox_preds,  # [[n, anchors*4, h, w]]
+             gt_bboxes,   # [n, gts, 4]
+             img_metas,   # [n, gts]
              cfg,
              gt_bboxes_ignore=None):
         losses = super(RPNHead, self).loss(
@@ -53,8 +53,8 @@ class RPNHead(AnchorHead):
             loss_rpn_cls=losses['loss_cls'], loss_rpn_bbox=losses['loss_bbox'])
 
     def get_bboxes_single(self,
-                          cls_scores,
-                          bbox_preds,
+                          cls_scores,  # list(level) of [anchors*class, h, w]
+                          bbox_preds,  # list(level) of [anchors*4, h, w]
                           mlvl_anchors,
                           img_shape,
                           scale_factor,
@@ -62,10 +62,10 @@ class RPNHead(AnchorHead):
                           rescale=False):
         mlvl_proposals = []
         for idx in range(len(cls_scores)):
-            rpn_cls_score = cls_scores[idx]
-            rpn_bbox_pred = bbox_preds[idx]
+            rpn_cls_score = cls_scores[idx]  # [anchors*class, h, w]
+            rpn_bbox_pred = bbox_preds[idx]  # [anchors*4, h, w]
             assert rpn_cls_score.size()[-2:] == rpn_bbox_pred.size()[-2:]
-            anchors = mlvl_anchors[idx]
+            anchors = mlvl_anchors[idx]      # 对应level anchors
             rpn_cls_score = rpn_cls_score.permute(1, 2, 0)
             if self.use_sigmoid_cls:
                 rpn_cls_score = rpn_cls_score.reshape(-1)

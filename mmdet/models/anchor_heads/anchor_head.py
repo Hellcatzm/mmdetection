@@ -110,7 +110,7 @@ class AnchorHead(nn.Module):
             anchors = self.anchor_generators[i].grid_anchors(
                 featmap_sizes[i], self.anchor_strides[i])
             multi_level_anchors.append(anchors)
-        anchor_list = [multi_level_anchors for _ in range(num_imgs)]
+        anchor_list = [multi_level_anchors for _ in range(num_imgs)]  # [imgs, [levels, [anchors, 4]]
 
         # for each image, we compute valid flags of multi level anchors
         valid_flag_list = []
@@ -136,6 +136,7 @@ class AnchorHead(nn.Module):
         label_weights = label_weights.reshape(-1)
         cls_score = cls_score.permute(0, 2, 3,
                                       1).reshape(-1, self.cls_out_channels)
+
         loss_cls = self.loss_cls(
             cls_score, labels, label_weights, avg_factor=num_total_samples)
         # regression loss
@@ -150,29 +151,30 @@ class AnchorHead(nn.Module):
         return loss_cls, loss_bbox
 
     def loss(self,
-             cls_scores,
-             bbox_preds,
-             gt_bboxes,
-             gt_labels,
+             cls_scores,  # [list: num_levels, [n, anchors*class, h, w]]
+             bbox_preds,  # [list: num_levels, [n, anchors*4, h, w]]
+             gt_bboxes,   # [n, gts, 4]
+             gt_labels,   # [n, ]
              img_metas,
              cfg,
              gt_bboxes_ignore=None):
-        featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
+        featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]  # [list: num_levels, [h_lv, w_lv]]
         assert len(featmap_sizes) == len(self.anchor_generators)
 
         anchor_list, valid_flag_list = self.get_anchors(
-            featmap_sizes, img_metas)
+            featmap_sizes, img_metas)  # [imgs, [levels, [anchors, 4]], [imgs, [levels, [anchors]]]
+
         label_channels = self.cls_out_channels if self.use_sigmoid_cls else 1
         cls_reg_targets = anchor_target(
-            anchor_list,
-            valid_flag_list,
-            gt_bboxes,
-            img_metas,
+            anchor_list,      # [imgs, [levels, [anchors, 4]]
+            valid_flag_list,  # [imgs, [levels, [anchors]]]
+            gt_bboxes,        # [imgs, gts, 4]
+            img_metas,        # [imgs]
             self.target_means,
             self.target_stds,
             cfg,
             gt_bboxes_ignore_list=gt_bboxes_ignore,
-            gt_labels_list=gt_labels,
+            gt_labels_list=gt_labels,  # [n]
             label_channels=label_channels,
             sampling=self.sampling)
         if cls_reg_targets is None:
@@ -183,8 +185,8 @@ class AnchorHead(nn.Module):
             num_total_pos + num_total_neg if self.sampling else num_total_pos)
         losses_cls, losses_bbox = multi_apply(
             self.loss_single,
-            cls_scores,
-            bbox_preds,
+            cls_scores,  # [list: num_levels, [n, anchors*class, h, w]]
+            bbox_preds,  # [list: num_levels, [n, anchors*4, h, w]]
             labels_list,
             label_weights_list,
             bbox_targets_list,
@@ -195,6 +197,8 @@ class AnchorHead(nn.Module):
 
     def get_bboxes(self, cls_scores, bbox_preds, img_metas, cfg,
                    rescale=False):
+        # cls_scores [list: num_levels, [n, anchors*class, h, w]]
+        # bbox_preds [list: num_levels, [n, anchors*4, h, w]]
         assert len(cls_scores) == len(bbox_preds)
         num_levels = len(cls_scores)
 
@@ -202,15 +206,15 @@ class AnchorHead(nn.Module):
             self.anchor_generators[i].grid_anchors(cls_scores[i].size()[-2:],
                                                    self.anchor_strides[i])
             for i in range(num_levels)
-        ]
+        ]  # 全level anchors
         result_list = []
         for img_id in range(len(img_metas)):
             cls_score_list = [
                 cls_scores[i][img_id].detach() for i in range(num_levels)
-            ]
+            ]  # 某张图片的全level得分: list of [anchors*class, h, w]
             bbox_pred_list = [
                 bbox_preds[i][img_id].detach() for i in range(num_levels)
-            ]
+            ]  # 某张图片的全level坐标: list of [anchors*4, h, w]
             img_shape = img_metas[img_id]['img_shape']
             scale_factor = img_metas[img_id]['scale_factor']
             proposals = self.get_bboxes_single(cls_score_list, bbox_pred_list,
@@ -232,18 +236,19 @@ class AnchorHead(nn.Module):
         mlvl_scores = []
         for cls_score, bbox_pred, anchors in zip(cls_scores, bbox_preds,
                                                  mlvl_anchors):
+            # [anchors*class, h, w], [anchors*4, h, w]
             assert cls_score.size()[-2:] == bbox_pred.size()[-2:]
             cls_score = cls_score.permute(1, 2,
-                                          0).reshape(-1, self.cls_out_channels)
+                                          0).reshape(-1, self.cls_out_channels)  # [h*w*anchors, num_class]
             if self.use_sigmoid_cls:
                 scores = cls_score.sigmoid()
             else:
                 scores = cls_score.softmax(-1)
-            bbox_pred = bbox_pred.permute(1, 2, 0).reshape(-1, 4)
+            bbox_pred = bbox_pred.permute(1, 2, 0).reshape(-1, 4)  # [h*w*anchors, 4]
             nms_pre = cfg.get('nms_pre', -1)
             if nms_pre > 0 and scores.shape[0] > nms_pre:
                 if self.use_sigmoid_cls:
-                    max_scores, _ = scores.max(dim=1)
+                    max_scores, _ = scores.max(dim=1)  # [h*w*anchors] 仅关注最高分得分
                 else:
                     max_scores, _ = scores[:, 1:].max(dim=1)
                 _, topk_inds = max_scores.topk(nms_pre)
@@ -252,15 +257,15 @@ class AnchorHead(nn.Module):
                 scores = scores[topk_inds, :]
             bboxes = delta2bbox(anchors, bbox_pred, self.target_means,
                                 self.target_stds, img_shape)
-            mlvl_bboxes.append(bboxes)
-            mlvl_scores.append(scores)
-        mlvl_bboxes = torch.cat(mlvl_bboxes)
+            mlvl_bboxes.append(bboxes)  # list of [nms_pre, 4]
+            mlvl_scores.append(scores)  # list of [nms_pre, num_class]
+        mlvl_bboxes = torch.cat(mlvl_bboxes)  # [num_levels*nms_pre, 4]
         if rescale:
             mlvl_bboxes /= mlvl_bboxes.new_tensor(scale_factor)
-        mlvl_scores = torch.cat(mlvl_scores)
+        mlvl_scores = torch.cat(mlvl_scores)  # [num_levels*nms_pre, num_class]
         if self.use_sigmoid_cls:
             padding = mlvl_scores.new_zeros(mlvl_scores.shape[0], 1)
-            mlvl_scores = torch.cat([padding, mlvl_scores], dim=1)
+            mlvl_scores = torch.cat([padding, mlvl_scores], dim=1)  # [num_levels*nms_pre, num_class+1]
         det_bboxes, det_labels = multiclass_nms(mlvl_bboxes, mlvl_scores,
                                                 cfg.score_thr, cfg.nms,
                                                 cfg.max_per_img)

@@ -6,6 +6,7 @@ from .. import builder
 from ..registry import DETECTORS
 from mmdet.core import (bbox2roi, bbox2result, build_assigner, build_sampler,
                         merge_aug_masks)
+from mmdet.core.bbox.transforms import delta2bbox
 
 
 @DETECTORS.register_module
@@ -67,7 +68,15 @@ class HybridTaskCascade(CascadeRCNN):
         cls_score, bbox_pred = bbox_head(bbox_feats)
 
         bbox_targets = bbox_head.get_target(sampling_results, rcnn_train_cfg)
-        loss_bbox = bbox_head.loss(cls_score, bbox_pred, *bbox_targets)
+        # labels, label_weights, bbox_proposal, bbox_targets, bbox_weights
+        if bbox_head.iou_target:
+            bbox_pred = delta2bbox(bbox_targets[-1],
+                                   bbox_pred,
+                                   bbox_head.target_means,
+                                   bbox_head.target_stds)
+            loss_bbox = bbox_head.loss(cls_score, bbox_pred, *bbox_targets[:-1])
+        else:
+            loss_bbox = bbox_head.loss(cls_score, bbox_pred, *bbox_targets)
         return loss_bbox, rois, bbox_targets, bbox_pred
 
     def _mask_forward_train(self,
@@ -210,7 +219,9 @@ class HybridTaskCascade(CascadeRCNN):
 
             for j in range(num_imgs):
                 assign_result = bbox_assigner.assign(
-                    proposal_list[j], gt_bboxes[j], gt_bboxes_ignore[j], # <-----gt
+                    proposal_list[j],
+                    gt_bboxes[j],
+                    gt_bboxes_ignore[j],
                     gt_labels[j])
                 sampling_result = bbox_sampler.sample(
                     assign_result,

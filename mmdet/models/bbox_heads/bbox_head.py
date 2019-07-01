@@ -7,7 +7,6 @@ from ..builder import build_loss
 from ..losses import accuracy
 from ..registry import HEADS
 
-
 @HEADS.register_module
 class BBoxHead(nn.Module):
     """Simplest RoI head, with only two fc layers for classification and
@@ -43,6 +42,9 @@ class BBoxHead(nn.Module):
 
         self.loss_cls = build_loss(loss_cls)
         self.loss_bbox = build_loss(loss_bbox)
+        self.iou_target = False  # IoU's bboxes target isn't delta
+        if "IoU" in loss_bbox['type']:
+            self.iou_target = True
 
         in_channels = self.in_channels
         if self.with_avg_pool:
@@ -86,7 +88,8 @@ class BBoxHead(nn.Module):
             rcnn_train_cfg,
             reg_classes,
             target_means=self.target_means,
-            target_stds=self.target_stds)
+            target_stds=self.target_stds,
+            iou_target=self.iou_target)
         return cls_reg_targets
 
     def loss(self,

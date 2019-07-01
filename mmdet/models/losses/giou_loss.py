@@ -24,7 +24,7 @@ def generalized_iou_loss(pred, target, mode="GIoU"):
         convex_wh = (convex_rb - convex_lt + 1).clamp(min=0)
         convex = convex_wh[:, 0] * convex_wh[:, 1]
 
-        gious = ious - (convex - unions) / convex  # [n]
+        gious = ious - (convex - unions) / convex.clamp(min=1e-5)  # [n]
         if (1 - gious).mean()<-100:
             import numpy as np
             np.save('ious.npy', ious.cpu().detach().numpy())

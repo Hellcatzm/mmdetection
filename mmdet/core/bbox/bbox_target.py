@@ -12,24 +12,41 @@ def bbox_target(pos_bboxes_list,
                 reg_classes=1,
                 target_means=[.0, .0, .0, .0],
                 target_stds=[1.0, 1.0, 1.0, 1.0],
-                concat=True):
-    labels, label_weights, bbox_targets, bbox_weights = multi_apply(
-        bbox_target_single,
-        pos_bboxes_list,
-        neg_bboxes_list,
-        pos_gt_bboxes_list,
-        pos_gt_labels_list,
-        cfg=cfg,
-        reg_classes=reg_classes,
-        target_means=target_means,
-        target_stds=target_stds)
+                concat=True,
+                iou_target=False):
+    if not iou_target:
+        labels, label_weights, bbox_targets, bbox_weights = multi_apply(
+            bbox_target_single,
+            pos_bboxes_list,
+            neg_bboxes_list,
+            pos_gt_bboxes_list,
+            pos_gt_labels_list,
+            cfg=cfg,
+            reg_classes=reg_classes,
+            target_means=target_means,
+            target_stds=target_stds)
 
-    if concat:
-        labels = torch.cat(labels, 0)
-        label_weights = torch.cat(label_weights, 0)
-        bbox_targets = torch.cat(bbox_targets, 0)
-        bbox_weights = torch.cat(bbox_weights, 0)
-    return labels, label_weights, bbox_targets, bbox_weights
+        if concat:
+            labels = torch.cat(labels, 0)
+            label_weights = torch.cat(label_weights, 0)
+            bbox_targets = torch.cat(bbox_targets, 0)
+            bbox_weights = torch.cat(bbox_weights, 0)
+        return labels, label_weights, bbox_targets, bbox_weights
+    else:
+        labels, label_weights, bbox_proposal, bbox_targets, bbox_weights = multi_apply(
+            bbox_iou_target_single,
+            pos_bboxes_list,
+            neg_bboxes_list,
+            pos_gt_bboxes_list,
+            pos_gt_labels_list,
+            cfg=cfg)
+        if concat:
+            labels = torch.cat(labels, 0)
+            label_weights = torch.cat(label_weights, 0)
+            bbox_proposal = torch.cat(bbox_proposal, 0)
+            bbox_targets = torch.cat(bbox_targets, 0)
+            bbox_weights = torch.cat(bbox_weights, 0)
+        return labels, label_weights, bbox_proposal, bbox_targets, bbox_weights
 
 
 def bbox_target_single(pos_bboxes,
@@ -59,6 +76,32 @@ def bbox_target_single(pos_bboxes,
         label_weights[-num_neg:] = 1.0
 
     return labels, label_weights, bbox_targets, bbox_weights
+
+
+def bbox_iou_target_single(pos_bboxes,
+                           neg_bboxes,
+                           pos_gt_bboxes,
+                           pos_gt_labels,
+                           cfg):
+    num_pos = pos_bboxes.size(0)
+    num_neg = neg_bboxes.size(0)
+    num_samples = num_pos + num_neg
+    labels = pos_bboxes.new_zeros(num_samples, dtype=torch.long)
+    label_weights = pos_bboxes.new_zeros(num_samples)
+    bbox_proposal = pos_bboxes.new_zeros(num_samples, 4)
+    bbox_targets = pos_bboxes.new_zeros(num_samples, 4)
+    bbox_weights = pos_bboxes.new_zeros(num_samples, 4)
+    if num_pos > 0:
+        labels[:num_pos] = pos_gt_labels
+        pos_weight = 1.0 if cfg.pos_weight <= 0 else cfg.pos_weight
+        label_weights[:num_pos] = pos_weight
+        bbox_proposal[:num_pos, :] = pos_bboxes
+        bbox_targets[:num_pos, :] = pos_gt_bboxes
+        bbox_weights[:num_pos, :] = 1
+    if num_neg > 0:
+        label_weights[-num_neg:] = 1.0
+
+    return labels, label_weights, bbox_targets, bbox_weights, bbox_proposal
 
 
 def expand_target(bbox_targets, bbox_weights, labels, num_classes):

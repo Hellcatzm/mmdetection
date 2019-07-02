@@ -1,6 +1,6 @@
 # model settings
 model = dict(
-    type='TridentHTC',
+    type='TridentRCNN',
     num_stages=3,
     val_range=((0, 20), (15, 35), (35, -1)),
     pretrained='modelzoo://resnet50',  # 'open-mmlab://resnext101_64x4d',

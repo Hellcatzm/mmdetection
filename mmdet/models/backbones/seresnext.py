@@ -1,5 +1,5 @@
 import math
-
+import torch
 import torch.nn as nn
 import torch.utils.checkpoint as cp
 from mmdet.ops import DeformConv, ModulatedDeformConv
@@ -10,9 +10,10 @@ from ..utils import build_conv_layer, build_norm_layer
 
 
 class SEModule(nn.Module):
-    def __init__(self, channels, ratio, conv_cfg=None):
+    def __init__(self, channels, ratio, conv_cfg=None, pooling_type='avg'):
         super(SEModule, self).__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        assert pooling_type in ['avg', 'att']
+        self.pooling_type = pooling_type
         self.conv1 = build_conv_layer(
             conv_cfg,
             channels,
@@ -27,10 +28,36 @@ class SEModule(nn.Module):
             kernel_size=1,
             padding=0)
         self.sigmoid = nn.Sigmoid()
+        if pooling_type == 'att':
+            self.conv_mask = nn.Conv2d(channels, 1, kernel_size=1)
+            self.softmax = nn.Softmax(dim=2)
+        else:
+            self.avg_pool = nn.AdaptiveAvgPool2d(1)
 
     def forward(self, x):
         identity = x
-        x = self.avg_pool(x)
+        batch, channel, height, width = x.size()
+        if self.pooling_type == 'att':
+            input_x = x
+            # [N, C, H * W]
+            input_x = input_x.view(batch, channel, height * width)
+            # [N, 1, C, H * W]
+            input_x = input_x.unsqueeze(1)
+            # [N, 1, H, W]
+            context_mask = self.conv_mask(x)
+            # [N, 1, H * W]
+            context_mask = context_mask.view(batch, 1, height * width)
+            # [N, 1, H * W]
+            context_mask = self.softmax(context_mask)
+            # [N, 1, H * W, 1]
+            context_mask = context_mask.unsqueeze(-1)
+            # [N, 1, C, 1]
+            context = torch.matmul(input_x, context_mask)
+            # [N, C, 1, 1]
+            context = context.view(batch, channel, 1, 1)
+        else:
+            # [N, C, 1, 1]
+            x = self.avg_pool(x)
         x = self.conv1(x)
         x = self.relu(x)
         x = self.conv2(x)
@@ -40,14 +67,14 @@ class SEModule(nn.Module):
 
 class Bottleneck(_Bottleneck):
 
-    def __init__(self, *args, groups=1, base_width=4, **kwargs):
+    def __init__(self, *args, groups=1, base_width=4, pooling_type='avg', **kwargs):
         """Bottleneck block for ResNeXt.
         If style is "pytorch", the stride-two layer is the 3x3 conv layer,
         if it is "caffe", the stride-two layer is the first 1x1 conv layer.
         """
         super(Bottleneck, self).__init__(*args, **kwargs)
 
-        self.se_module = SEModule(self.planes * self.expansion, ratio=1/16)
+        self.se_module = SEModule(self.planes * self.expansion, ratio=1/16, pooling_type=pooling_type)
 
         if groups == 1:
             width = self.planes
@@ -174,7 +201,8 @@ def make_res_layer(block,
                    with_cp=False,
                    conv_cfg=None,
                    norm_cfg=dict(type='BN'),
-                   dcn=None):
+                   dcn=None,
+                   pooling_type='avg'):
     downsample = None
     if stride != 1 or inplanes != planes * block.expansion:
         downsample = nn.Sequential(
@@ -202,7 +230,8 @@ def make_res_layer(block,
             with_cp=with_cp,
             conv_cfg=conv_cfg,
             norm_cfg=norm_cfg,
-            dcn=dcn))
+            dcn=dcn,
+            pooling_type=pooling_type))
     inplanes = planes * block.expansion
     for i in range(1, blocks):
         layers.append(
@@ -217,7 +246,8 @@ def make_res_layer(block,
                 with_cp=with_cp,
                 conv_cfg=conv_cfg,
                 norm_cfg=norm_cfg,
-                dcn=dcn))
+                dcn=dcn,
+                pooling_type=pooling_type))
 
     return nn.Sequential(*layers)
 
@@ -255,7 +285,7 @@ class SEResNeXt(ResNet):
         152: (Bottleneck, (3, 8, 36, 3))
     }
 
-    def __init__(self, groups=1, base_width=4, **kwargs):
+    def __init__(self, groups=1, base_width=4, pooling_type='avg', **kwargs):
         super(SEResNeXt, self).__init__(**kwargs)
         self.groups = groups
         self.base_width = base_width
@@ -280,7 +310,8 @@ class SEResNeXt(ResNet):
                 with_cp=self.with_cp,
                 conv_cfg=self.conv_cfg,
                 norm_cfg=self.norm_cfg,
-                dcn=dcn)
+                dcn=dcn,
+                pooling_type=pooling_type)
             self.inplanes = planes * self.block.expansion
             layer_name = 'layer{}'.format(i + 1)
             self.add_module(layer_name, res_layer)

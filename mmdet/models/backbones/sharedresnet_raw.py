@@ -406,7 +406,7 @@ class SharedResNet_raw(nn.Module):
                  norm_eval=False,
                  frozen_stages=-1,
                  **kwargs):
-        super(SharedResNet, self).__init__()
+        super(SharedResNet_raw, self).__init__()
         self.conv_cfg = conv_cfg
         self.norm_cfg = norm_cfg
         self.norm_eval = norm_eval
@@ -492,7 +492,7 @@ class SharedResNet_raw(nn.Module):
             return outs
 
     def train(self, mode=True):
-        super(SharedResNet, self).train(mode)
+        super(SharedResNet_raw, self).train(mode)
         self._freeze_stages()
         if mode and self.norm_eval:
             for m in self.modules():

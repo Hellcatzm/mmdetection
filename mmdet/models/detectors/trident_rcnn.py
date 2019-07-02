@@ -30,7 +30,7 @@ class TridentRCNN(HybridTaskCascade):
                       gt_semantic_seg=None,
                       proposals=None):
         rpn_feat, rcnn_feat = self.extract_feat(img)  # [3n, 256, h, w]
-
+        self.sr = []
         # convert data from dim imgs to dim branches*imgs
         if not isinstance(gt_bboxes_ignore, (list, tuple)):
             gt_bboxes_ignore = [None]
@@ -42,7 +42,7 @@ class TridentRCNN(HybridTaskCascade):
         gt_bboxes_ignore_ = list()
         val_index = torch.zeros(rpn_feat.shape[0])
         val_pointer = -1
-        for img_num in range(int(rpn_feat.shape[0] / 3)):
+        for img_num in range(img.size(0)):
             for lo, hi in self.val_range:
                 val_pointer += 1
                 bboxes_hw = gt_bboxes[img_num][:, 2:] - gt_bboxes[img_num][:, :2]
@@ -53,11 +53,16 @@ class TridentRCNN(HybridTaskCascade):
                     boxes_index = boxes_area > lo ** 2
                 if boxes_index.int().sum():
                     val_index[val_pointer] = 1
+                    arg_idx = torch.nonzero(boxes_index).squeeze()
                     img_meta_.append(img_meta[img_num])
-                    gt_bboxes_.append(gt_bboxes[img_num][boxes_index])  # [3n, [gts_v, 4]]
-                    gt_labels_.append(gt_labels[img_num][boxes_index])  # [3n, [gts_v]]
-                    gt_masks_.append(gt_masks[img_num][boxes_index.int().cpu()])
+                    gt_bboxes_.append(gt_bboxes[img_num][arg_idx])  # [3n, [gts_v, 4]]
+                    gt_labels_.append(gt_labels[img_num][arg_idx])  # [3n, [gts_v]]
+                    gt_masks_.append(gt_masks[img_num][arg_idx.cpu()])
                     gt_bboxes_ignore_.append(gt_bboxes_ignore[img_num])
+                    if arg_idx.numel() == 1:
+                        gt_bboxes_[-1].unsqueeze_(dim=0)
+                        gt_labels_[-1].unsqueeze_(dim=0)
+                        gt_masks_[-1] = gt_masks_[-1][None]
         idx = torch.nonzero(val_index).squeeze()
         rpn_feat = rpn_feat[idx][None]
         rcnn_feat = rcnn_feat[idx][None]
@@ -67,6 +72,7 @@ class TridentRCNN(HybridTaskCascade):
 
         # forward as normal
         losses = dict()
+
         # RPN part, the same as normal two-stage detectors
         assert self.with_rpn, "Trident Net must have RPN head"
 
@@ -75,6 +81,7 @@ class TridentRCNN(HybridTaskCascade):
         # [list: num_levels, [3n, anchors*4, h, w]]
 
         rpn_loss_inputs = rpn_outs + (gt_bboxes_, img_meta_, self.train_cfg.rpn)
+        self.rpn = rpn_loss_inputs
         rpn_losses = self.rpn_head.loss(
             *rpn_loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore_)
 
@@ -103,7 +110,7 @@ class TridentRCNN(HybridTaskCascade):
                 assign_result = bbox_assigner.assign(
                     proposal_list[j],
                     gt_bboxes_[j],
-                    gt_bboxes_ignore_[j],  # <-----gt
+                    gt_bboxes_ignore_[j],
                     gt_labels_[j])
                 sampling_result = bbox_sampler.sample(
                     assign_result,
@@ -124,54 +131,52 @@ class TridentRCNN(HybridTaskCascade):
                 losses['s{}.{}'.format(i, name)] = (
                     value * lw if 'loss' in name else value)
 
-                # mask head forward and loss
-                if self.with_mask:
-                    # interleaved execution: use regressed bboxes by the box branch
-                    # to train the mask branch
-                    if self.interleaved:
-                        pos_is_gts = [res.pos_is_gt for res in sampling_results]
-                        with torch.no_grad():
-                            proposal_list = self.bbox_head[i].refine_bboxes(
-                                rois, roi_labels, bbox_pred, pos_is_gts, img_meta_)
-                            # re-assign and sample 512 RoIs from 512 RoIs
-                            sampling_results = []
-                            for j in range(num_imgs):
-                                assign_result = bbox_assigner.assign(
-                                    proposal_list[j],
-                                    gt_bboxes_[j],
-                                    gt_bboxes_ignore_[j],
-                                    gt_labels_[j])
-                                sampling_result = bbox_sampler.sample(
-                                    assign_result,
-                                    proposal_list[j],
-                                    gt_bboxes_[j],
-                                    gt_labels_[j],
-                                    feats=rcnn_feat)
-                                sampling_results.append(sampling_result)
-                    loss_mask = self._mask_forward_train(i, rcnn_feat, sampling_results,
-                                                         gt_masks_, rcnn_train_cfg,
-                                                         semantic_feat)
-                    for name, value in loss_mask.items():
-                        losses['s{}.{}'.format(i, name)] = (
-                            value * lw if 'loss' in name else value)
-
-                # refine bboxes (same as Cascade R-CNN)
-                if i < self.num_stages - 1 and not self.interleaved:
+            # mask head forward and loss
+            if self.with_mask:
+                # interleaved execution: use regressed bboxes by the box branch
+                # to train the mask branch
+                if self.interleaved:
                     pos_is_gts = [res.pos_is_gt for res in sampling_results]
                     with torch.no_grad():
                         proposal_list = self.bbox_head[i].refine_bboxes(
                             rois, roi_labels, bbox_pred, pos_is_gts, img_meta_)
+                        # re-assign and sample 512 RoIs from 512 RoIs
+                        sampling_results = []
+                        for j in range(num_imgs):
+                            assign_result = bbox_assigner.assign(
+                                proposal_list[j],
+                                gt_bboxes_[j],
+                                gt_bboxes_ignore_[j],
+                                gt_labels_[j])
+                            sampling_result = bbox_sampler.sample(
+                                assign_result,
+                                proposal_list[j],
+                                gt_bboxes_[j],
+                                gt_labels_[j],
+                                feats=rcnn_feat)
+                            sampling_results.append(sampling_result)
+                self.sr.append(sampling_results)
+                loss_mask = self._mask_forward_train(i, rcnn_feat, sampling_results,
+                                                     gt_masks_, rcnn_train_cfg,
+                                                     semantic_feat)
+                for name, value in loss_mask.items():
+                    losses['s{}.{}'.format(i, name)] = (
+                        value * lw if 'loss' in name else value)
+
+            # refine bboxes (same as Cascade R-CNN)
+            if i < self.num_stages - 1 and not self.interleaved:
+                pos_is_gts = [res.pos_is_gt for res in sampling_results]
+                with torch.no_grad():
+                    proposal_list = self.bbox_head[i].refine_bboxes(
+                        rois, roi_labels, bbox_pred, pos_is_gts, img_meta_)
 
         return losses
 
     def simple_test(self, img, img_meta, proposals=None, rescale=False):
-
         rpn_feat, rcnn_feat = self.extract_feat(img)  # [n, 256, h, w], [n, 256, h, w]
-
         proposal_list = self.simple_test_rpn(
             rpn_feat[None], img_meta, self.test_cfg.rpn) if proposals is None else proposals
 
-        self.pro = proposal_list
         assert not self.with_semantic, "Not supply yet"
         semantic_feat = None
 
@@ -205,10 +210,27 @@ class TridentRCNN(HybridTaskCascade):
                                           bbox_head.num_classes)
                 ms_bbox_result['stage{}'.format(i)] = bbox_result
 
-        if i < self.num_stages - 1:
-            bbox_label = cls_score.argmax(dim=1)
-            rois = bbox_head.regress_by_class(rois, bbox_label, bbox_pred,
-                                              img_meta[0])
+                if self.with_mask:
+                    mask_head = self.mask_head[i]
+                    if det_bboxes.shape[0] == 0:
+                        segm_result = [
+                            [] for _ in range(mask_head.num_classes - 1)
+                        ]
+                    else:
+                        _bboxes = (
+                            det_bboxes[:, :4] * scale_factor
+                            if rescale else det_bboxes)
+                        mask_pred = self._mask_forward_test(
+                            i, rcnn_feat[None], _bboxes, semantic_feat=semantic_feat)
+                        segm_result = mask_head.get_seg_masks(
+                            mask_pred, _bboxes, det_labels, rcnn_test_cfg,
+                            ori_shape, scale_factor, rescale)
+                    ms_segm_result['stage{}'.format(i)] = segm_result
+
+            if i < self.num_stages - 1:
+                bbox_label = cls_score.argmax(dim=1)
+                rois = bbox_head.regress_by_class(rois, bbox_label, bbox_pred,
+                                                  img_meta[0])
 
         cls_score = sum(ms_scores) / float(len(ms_scores))
         det_bboxes, det_labels = self.bbox_head[-1].get_det_bboxes(

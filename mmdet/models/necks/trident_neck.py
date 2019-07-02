@@ -10,15 +10,26 @@ from ..utils import ConvModule
 
 @NECKS.register_module
 class TridentNeck(nn.Module):
-    def __init__(self, fpn_in_channels, rcnn_in_channels, out_channels):
+    def __init__(self,
+                 fpn_in_channels=1024,
+                 rcnn_in_channels=2048,
+                 fpn_out_channels=256,
+                 rcnn_out_channels=256,
+                 if_conv=True):
         super(TridentNeck, self).__init__()
-        self.rpn_neck = nn.Conv2d(fpn_in_channels, out_channels, kernel_size=1)
-        self.rcnn_neck = nn.Conv2d(rcnn_in_channels, out_channels, kernel_size=1)
+        self.if_conv = if_conv
+        if if_conv:
+            self.rpn_neck = nn.Conv2d(fpn_in_channels, fpn_out_channels, kernel_size=1)
+            self.rcnn_neck = nn.Conv2d(rcnn_in_channels, rcnn_out_channels, kernel_size=1)
 
     def init_weights(self):
+        if not self.if_conv:
+            return
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 xavier_init(m, distribution='uniform')
 
     def forward(self, rpn_input, rcnn_input):
-        return self.rpn_neck(rpn_input), self.rcnn_neck(rcnn_input)
+        if self.if_conv:
+            return self.rpn_neck(rpn_input), self.rcnn_neck(rcnn_input)
+        return rpn_input, rcnn_input

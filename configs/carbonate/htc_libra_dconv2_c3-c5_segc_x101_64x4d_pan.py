@@ -1,30 +1,50 @@
 # model settings
+norm_cfg = dict(type='SyncBN', requires_grad=True)
+
 model = dict(
-    type='TridentRCNN',
+    type='HybridTaskCascade',
     num_stages=3,
-    val_range=((0, 20), (15, 35), (35, -1)),
-    pretrained='modelzoo://resnet50',  # 'open-mmlab://resnext101_64x4d',
+    pretrained='open-mmlab://resnext101_64x4d',
     interleaved=True,
     mask_info_flow=True,
     backbone=dict(
-        type='SharedResNet',
-        depth=50,
-        out_indices=(2, 3),
-        norm_cfg=dict(type='BN', requires_grad=True),
-        norm_eval=False),
-    neck=dict(
-        type='TridentNeck',
-        fpn_in_channels=1024,
-        rcnn_in_channels=2048,
-        fpn_out_channels=1024,
-        rcnn_out_channels=256),
+        type='SEResNeXt',
+        depth=101,
+        groups=64,
+        base_width=4,
+        num_stages=4,
+        out_indices=(0, 1, 2, 3),
+        frozen_stages=-1,
+        norm_cfg=norm_cfg,
+        style='pytorch',
+        dcn=dict(
+            modulated=True,
+            groups=64,
+            deformable_groups=1,
+            fallback_on_stride=False),
+        stage_with_dcn=(False, True, True, True),
+        pooling_type='att'),
+    neck=[dict(
+        type='FPN',
+        in_channels=[256, 512, 1024, 2048],
+        out_channels=256,
+        num_outs=5,
+        norm_cfg=norm_cfg,
+        activation="relu",
+        bottom_up_path=True),
+        dict(
+            type='BFP',
+            in_channels=256,
+            num_levels=5,
+            refine_level=2,
+            refine_type='conv')],
     rpn_head=dict(
         type='RPNHead',
-        in_channels=1024,
+        in_channels=256,
         feat_channels=256,
-        anchor_scales=[1/8, 1/4, 1, 2],        # scale*stride为边长基准
+        anchor_scales=[4],  # scale*stride为边长基准
         anchor_ratios=[0.5, 1.0, 2.0],
-        anchor_strides=[16],                   # 对应rpn feats数目
+        anchor_strides=[4, 8, 16, 32, 64],
         target_means=[.0, .0, .0, .0],
         target_stds=[1.0, 1.0, 1.0, 1.0],
         loss_cls=dict(
@@ -34,7 +54,7 @@ model = dict(
         type='SingleRoIExtractor',
         roi_layer=dict(type='RoIAlign', out_size=7, sample_num=4),
         out_channels=256,
-        featmap_strides=[16]),  # <-----待定参数(原[4, 8, 16, 32])
+        featmap_strides=[4, 8, 16, 32]),
     bbox_head=[
         dict(
             type='SharedFCBBoxHead',
@@ -50,10 +70,17 @@ model = dict(
                 type='CrossEntropyLoss',
                 use_sigmoid=False,
                 loss_weight=1.0),
+            # loss_bbox=dict(
+            #     type='SmoothL1Loss',
+            #     beta=1.0,
+            #     loss_weight=1.0)
             loss_bbox=dict(
-                type='SmoothL1Loss',
+                type='BalancedL1Loss',
+                alpha=0.5,
+                gamma=1.5,
                 beta=1.0,
-                loss_weight=1.0)),
+                loss_weight=1.0)
+        ),
         dict(
             type='SharedFCBBoxHead',
             num_fcs=2,
@@ -68,10 +95,17 @@ model = dict(
                 type='CrossEntropyLoss',
                 use_sigmoid=False,
                 loss_weight=1.0),
+            # loss_bbox=dict(
+            #     type='SmoothL1Loss',
+            #     beta=1.0,
+            #     loss_weight=1.0)
             loss_bbox=dict(
-                type='SmoothL1Loss',
+                type='BalancedL1Loss',
+                alpha=0.5,
+                gamma=1.5,
                 beta=1.0,
-                loss_weight=1.0)),
+                loss_weight=1.0)
+        ),
         dict(
             type='SharedFCBBoxHead',
             num_fcs=2,
@@ -86,16 +120,23 @@ model = dict(
                 type='CrossEntropyLoss',
                 use_sigmoid=False,
                 loss_weight=1.0),
+            # loss_bbox=dict(
+            #     type='SmoothL1Loss',
+            #     beta=1.0,
+            #     loss_weight=1.0)
             loss_bbox=dict(
-                type='SmoothL1Loss',
+                type='BalancedL1Loss',
+                alpha=0.5,
+                gamma=1.5,
                 beta=1.0,
-                loss_weight=1.0))
+                loss_weight=1.0)
+        )
     ],
     mask_roi_extractor=dict(
         type='SingleRoIExtractor',
         roi_layer=dict(type='RoIAlign', out_size=14, sample_num=4),
         out_channels=256,
-        featmap_strides=[16]),  # <-----待定参数(原[4, 8, 16, 32])
+        featmap_strides=[4, 8, 16, 32]),
     mask_head=dict(
         type='HTCMaskHead',
         num_convs=4,
@@ -104,7 +145,21 @@ model = dict(
         num_classes=3,
         loss_mask=dict(
             type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)),
-)
+    semantic_roi_extractor=dict(
+        type='SingleRoIExtractor',
+        roi_layer=dict(type='RoIAlign', out_size=14, sample_num=4),
+        out_channels=256,
+        featmap_strides=[8]),  # semantic分支取样仅在8采样位置
+    semantic_head=dict(
+        type='FusedSemanticHead',
+        num_ins=5,
+        fusion_level=1,
+        num_convs=4,
+        in_channels=256,
+        conv_out_channels=256,
+        num_classes=3,  # 语义标签类别0,1和背景
+        ignore_label=255,
+        loss_weight=0.2))
 # model training and testing settings
 train_cfg = dict(
     # rpn_head->rpn_propose->rpn_assigner->rpn_samper
@@ -135,16 +190,23 @@ train_cfg = dict(
         dict(
             assigner=dict(
                 type='MaxIoUAssigner',
-                pos_iou_thr=0.3,
-                neg_iou_thr=0.3,
-                min_pos_iou=0.3,
+                pos_iou_thr=0.5,
+                neg_iou_thr=0.5,
+                min_pos_iou=0.5,
                 ignore_iof_thr=-1),
             sampler=dict(
-                type='RandomSampler',
+                type='CombinedSampler',
                 num=300,
                 pos_fraction=0.5,
-                neg_pos_ub=-1,
-                add_gt_as_proposals=True),
+                # neg_pos_ub=-1,
+                add_gt_as_proposals=True,
+                pos_sampler=dict(type='InstanceBalancedPosSampler'),
+                neg_sampler=dict(
+                    type='IoUBalancedNegSampler',
+                    floor=-1,
+                    floor_thr=0,
+                    num_bins=3)
+            ),
             mask_size=28,
             pos_weight=-1,
             debug=False),
@@ -156,11 +218,18 @@ train_cfg = dict(
                 min_pos_iou=0.6,
                 ignore_iof_thr=-1),
             sampler=dict(
-                type='RandomSampler',
+                type='CombinedSampler',
                 num=300,
                 pos_fraction=0.5,
-                neg_pos_ub=-1,
-                add_gt_as_proposals=True),
+                # neg_pos_ub=-1,
+                add_gt_as_proposals=True,
+                pos_sampler=dict(type='InstanceBalancedPosSampler'),
+                neg_sampler=dict(
+                    type='IoUBalancedNegSampler',
+                    floor=-1,
+                    floor_thr=0,
+                    num_bins=3)
+            ),
             mask_size=28,
             pos_weight=-1,
             debug=False),
@@ -172,11 +241,18 @@ train_cfg = dict(
                 min_pos_iou=0.7,
                 ignore_iof_thr=-1),
             sampler=dict(
-                type='RandomSampler',
+                type='CombinedSampler',
                 num=300,
                 pos_fraction=0.5,
-                neg_pos_ub=-1,
-                add_gt_as_proposals=True),
+                # neg_pos_ub=-1,
+                add_gt_as_proposals=True,
+                pos_sampler=dict(type='InstanceBalancedPosSampler'),
+                neg_sampler=dict(
+                    type='IoUBalancedNegSampler',
+                    floor=-1,
+                    floor_thr=0,
+                    num_bins=3)
+            ),
             mask_size=28,
             pos_weight=-1,
             debug=False)
@@ -208,7 +284,7 @@ data = dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/carb_annotations_tra.json',
         img_prefix=data_root + 'tra_images/',
-        img_scale=(300, 300),  # 长边不长于1333， 短边不长于800，保持比例
+        img_scale=(1333, 800),  # 长边不长于1333， 短边不长于800，保持比例
         img_norm_cfg=img_norm_cfg,
         size_divisor=32,  # 可以被32整除
         flip_ratio=0.5,
@@ -222,7 +298,7 @@ data = dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/carb_annotations_val.json',
         img_prefix=data_root + 'val_images/',
-        img_scale=(500, 500),
+        img_scale=(1333, 800),
         img_norm_cfg=img_norm_cfg,
         size_divisor=32,
         flip_ratio=0,
@@ -260,10 +336,10 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 20
+total_epochs = 26
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/htc_trident_carb'
+work_dir = './work_dirs/htc_libra_dconv2_c3-c5_segc_x101_64x4d_pan_carb'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]

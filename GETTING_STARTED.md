@@ -64,7 +64,7 @@ Here is an example of building the model and test given images.
 ```python
 from mmdet.apis import init_detector, inference_detector, show_result
 
-config_file = 'configs/faster_rcnn_r50_fpn_1x.py'
+config_file = trident_rcnn_r50_fpn_1x.py
 checkpoint_file = 'checkpoints/faster_rcnn_r50_fpn_1x_20181010-3d1b3351.pth'
 
 # build the model from a config file and a checkpoint file

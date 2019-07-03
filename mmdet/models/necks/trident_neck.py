@@ -29,7 +29,8 @@ class TridentNeck(nn.Module):
             if isinstance(m, nn.Conv2d):
                 xavier_init(m, distribution='uniform')
 
-    def forward(self, rpn_input, rcnn_input):
+    def forward(self, x):
+        rpn_input, rcnn_input = x
         if self.if_conv:
             return self.rpn_neck(rpn_input), self.rcnn_neck(rcnn_input)
         return rpn_input, rcnn_input

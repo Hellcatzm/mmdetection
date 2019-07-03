@@ -25,23 +25,23 @@ def backward_hook(module, grad_input, grad_output):
 
 
 HOOT_MODE = "train"  # "inference" or "train"
-ROOT_DIR = '/home/gttintern/mmdetection'
-CONFIG_NAME = 'configs/carbonate/htc_libra_dconv2_c3-c5_segc_x101_64x4d_pan.py'
+ROOT_DIR = '/home/hellcatzm/mmdetection'
+CONFIG_NAME = 'configs/carbonate/fast_rcnn_r50_fpn_1x.py'
 
 config_file = os.path.join(ROOT_DIR, CONFIG_NAME)
 cfg = mmcv.Config.fromfile(config_file)
 
 model = build_detector(
         cfg.model, train_cfg=cfg.train_cfg, test_cfg=cfg.test_cfg).cuda()
-checkpoint_file = os.path.join(os.path.join(ROOT_DIR, cfg.work_dir), 'latest.pth')
+# checkpoint_file = os.path.join(os.path.join(ROOT_DIR, cfg.work_dir), 'latest.pth')
 # load_checkpoint(model, checkpoint_file, map_location='cpu')
 
 cfg.data.train.ann_file = os.path.join(ROOT_DIR,
                                        cfg.data.train.ann_file)
 cfg.data.train.img_prefix = os.path.join(ROOT_DIR,
                                          cfg.data.train.img_prefix)
-cfg.data.train.seg_prefix = os.path.join(ROOT_DIR,
-                                         cfg.data.train.seg_prefix)
+# cfg.data.train.seg_prefix = os.path.join(ROOT_DIR,
+#                                          cfg.data.train.seg_prefix)
 dataset = get_dataset(cfg.data.train)
 dataloader = build_dataloader(
     dataset,
@@ -67,8 +67,8 @@ if HOOT_MODE == "inference":
                        img_meta=[batch_data['img_meta'].data[0]],
                        )
     plt.imshow(batch_data['img'].data[0][0][1])
-    for i in range(10):
-        plt.plot(result[0][0][i][[0,2]],result[0][0][i][[1,3]])
+    # for i in range(10):
+    #     plt.plot(result[0][0][i][[0,2]],result[0][0][i][[1,3]])
 elif HOOT_MODE == "train":
     # _____________________________________________________________________
     """
@@ -81,8 +81,8 @@ elif HOOT_MODE == "train":
                        gt_bboxes=[t.cuda() for t in batch_data['gt_bboxes'].data[0]],
                        gt_labels=[t.cuda() for t in batch_data['gt_labels'].data[0]],
                        gt_bboxes_ignore=batch_data['gt_bboxes_ignore'].data[0],
-                       gt_masks=[t for t in batch_data['gt_masks'].data[0]],  # 传入numpy数组即可
-                       gt_semantic_seg=batch_data['gt_semantic_seg'].data[0].cuda()
+                       # gt_masks=[t for t in batch_data['gt_masks'].data[0]],  # 传入numpy数组即可
+                       # gt_semantic_seg=batch_data['gt_semantic_seg'].data[0].cuda()
                        )
         break
 

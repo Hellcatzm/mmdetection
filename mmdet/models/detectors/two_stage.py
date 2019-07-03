@@ -148,6 +148,11 @@ class TwoStageDetector(BaseDetector, RPNTestMixin, BBoxTestMixin,
 
             bbox_targets = self.bbox_head.get_target(
                 sampling_results, gt_bboxes, gt_labels, self.train_cfg.rcnn)
+
+            s = torch.argmax(cls_score, dim=1)
+            print("ACC:",
+                  (s[bbox_targets[0]>0]==bbox_targets[0][bbox_targets[0]>0]).sum().float()/float(s[bbox_targets[0]>0].numel()))
+
             loss_bbox = self.bbox_head.loss(cls_score, bbox_pred,
                                             *bbox_targets)
             losses.update(loss_bbox)

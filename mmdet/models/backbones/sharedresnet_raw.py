@@ -477,18 +477,18 @@ class SharedResNet_raw(nn.Module):
             c4_f = torch.stack(c4_fs, dim=1)
             c4_f = c4_f.view(c4_shape)
 
-            c5_f = self.c5(c4_f)
+            # c5_f = self.c5(c4_f)
 
-            outs = [c4_f, c5_f]
+            outs = [c4_f]
             return outs
         else:
             c1_f = self.c1(x)
             c2_f = self.c2(c1_f)
             c3_f = self.c3(c2_f)
             c4_f = self.c4(c3_f)
-            c5_f = self.c5(c4_f)
+            # c5_f = self.c5(c4_f)
 
-            outs = [c4_f, c5_f]
+            outs = [c4_f]
             return outs
 
     def train(self, mode=True):

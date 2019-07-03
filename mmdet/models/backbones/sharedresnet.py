@@ -441,7 +441,8 @@ class SharedResNet(nn.Module):
                  stage_with_gen_attention=((), (), (), ()),
                  with_cp=False,
                  zero_init_residual=True,
-                 if_shared=True):
+                 if_shared=True,
+                 shared_layer=2):
         super(SharedResNet, self).__init__()
         if depth not in self.arch_settings:
             raise KeyError('invalid depth {} for resnet'.format(depth))
@@ -473,6 +474,7 @@ class SharedResNet(nn.Module):
         self.stage_blocks = stage_blocks[:num_stages]
         self.inplanes = 64
         self.shared = if_shared
+        self.shared_layer = shared_layer
 
         self._make_stem_layer()
 
@@ -483,7 +485,7 @@ class SharedResNet(nn.Module):
             dcn = self.dcn if self.stage_with_dcn[i] else None
             gcb = self.gcb if self.stage_with_gcb[i] else None
             planes = 64 * 2**i
-            if i == 2 and self.shared:
+            if i == self.shared_layer and self.shared:
                 res_layer = make_trid_res_layer(SharedBottleneck,
                                                 self.inplanes,
                                                 planes,
@@ -581,7 +583,7 @@ class SharedResNet(nn.Module):
         for i, layer_name in enumerate(self.res_layers):
             res_layer = getattr(self, layer_name)
 
-            if i == 2 and self.shared and self.training:
+            if i == self.shared_layer and self.shared and self.training:
                 x = [x for _ in range(3)]
                 x = res_layer(x)
                 c4_shape = list(x[0].shape)

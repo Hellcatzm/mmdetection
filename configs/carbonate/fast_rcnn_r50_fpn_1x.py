@@ -1,27 +1,22 @@
 # model settings
 model = dict(
-    type='FasterRCNN',
+    type='TridentRCNN',
     pretrained='modelzoo://resnet50',
     backbone=dict(
-        type='ResNet',
+        type='SharedResNet',
         depth=50,
-        num_stages=4,
-        out_indices=(0, 1, 2, 3),
-        frozen_stages=1,
-        style='pytorch'),
-    neck=dict(
-        type='FPN',
-        in_channels=[256, 512, 1024, 2048],
-        out_channels=256,
-        num_outs=5,
-        bottom_up_path=False),
+        out_indices=(2,),
+        if_shared=True,
+        shared_layer=1,
+    ),
+    neck=None,
     rpn_head=dict(
         type='RPNHead',
-        in_channels=256,
-        feat_channels=256,
-        anchor_scales=[8],
+        in_channels=1024,
+        feat_channels=1024,
+        anchor_scales=[1/4, 1/2, 1, 2, 4, 8],
         anchor_ratios=[0.5, 1.0, 2.0],
-        anchor_strides=[4, 8, 16, 32, 64],
+        anchor_strides=[16],
         target_means=[.0, .0, .0, .0],
         target_stds=[1.0, 1.0, 1.0, 1.0],
         loss_cls=dict(
@@ -30,22 +25,21 @@ model = dict(
     bbox_roi_extractor=dict(
         type='SingleRoIExtractor',
         roi_layer=dict(type='RoIAlign', out_size=7, sample_num=2),
-        out_channels=256,
-        featmap_strides=[4, 8, 16, 32]),
+        out_channels=1024,
+        featmap_strides=[16]),
     bbox_head=dict(
         type='SharedFCBBoxHead',
         num_fcs=2,
-        in_channels=256,
+        in_channels=1024,
         fc_out_channels=1024,
         roi_feat_size=7,
-        num_classes=81,
+        num_classes=3,
         target_means=[0., 0., 0., 0.],
         target_stds=[0.1, 0.1, 0.2, 0.2],
         reg_class_agnostic=False,
         loss_cls=dict(
             type='CrossEntropyLoss', use_sigmoid=False, loss_weight=1.0),
-        # loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0)))
-        loss_bbox=dict(type='GIoULoss', loss_weight=1.0)))
+        loss_bbox=dict(type='SmoothL1Loss', beta=1.0, loss_weight=1.0)))
 # model training and testing settings
 train_cfg = dict(
     rpn=dict(
@@ -105,13 +99,13 @@ data_root = 'data/carbonate/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 data = dict(
-    imgs_per_gpu=2,
-    workers_per_gpu=2,
+    imgs_per_gpu=1,
+    workers_per_gpu=1,
     train=dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/carb_annotations_tra.json',
         img_prefix=data_root + 'tra_images/',
-        img_scale=(1333, 800),
+        img_scale=(512, 300),
         img_norm_cfg=img_norm_cfg,
         size_divisor=32,
         flip_ratio=0.5,
@@ -122,7 +116,7 @@ data = dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/carb_annotations_val.json',
         img_prefix=data_root + 'val_images/',
-        img_scale=(1333, 800),
+        img_scale=(512, 300),
         img_norm_cfg=img_norm_cfg,
         size_divisor=32,
         flip_ratio=0,
@@ -133,7 +127,7 @@ data = dict(
         type=dataset_type,
         ann_file=data_root + 'annotations/carb_annotations_val.json',
         img_prefix=data_root + 'val_images/',
-        img_scale=(1333, 800),
+        img_scale=(512, 300),
         img_norm_cfg=img_norm_cfg,
         size_divisor=32,
         flip_ratio=0,
@@ -163,7 +157,7 @@ log_config = dict(
 total_epochs = 12
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/faster_rcnn_r50_fpn_1x_carb'
-load_from = './work_dirs/faster_rcnn_r50_fpn_1x_carb/latest.pth'
+work_dir = './work_dirs/faster_rcnn_r50_fpn_1x'
+load_from = None
 resume_from = None
 workflow = [('train', 1)]

@@ -37,10 +37,11 @@ class SharedBottleneck(nn.Module):
         else:
             normalizer = nn.SyncBatchNorm
 
+        self.norm1 = SharedBN(inplanes=inplanes, normalizer=normalizer)
         self.conv1 = SharedConv(inplanes=inplanes, planes=planes,
                                 stride=1, dilate=1, kernel_size=1, with_bias=False)
-        self.norm1 = SharedBN(inplanes=planes, normalizer=normalizer)
 
+        self.norm2 = SharedBN(inplanes=planes, normalizer=normalizer)
         fallback_on_stride = False
         self.with_modulated_dcn = False
         if self.with_dcn:
@@ -55,10 +56,10 @@ class SharedBottleneck(nn.Module):
                                           stride=stride, dilate=dilate, pad=dilate,
                                           kernel_size=3, deformable_groups=deformable_groups)
 
-        self.norm2 = SharedBN(inplanes=planes, normalizer=normalizer)
+        self.norm3 = SharedBN(inplanes=planes, normalizer=normalizer)
         self.conv3 = SharedConv(inplanes=planes, planes=planes*self.expansion,
                                 stride=1, dilate=1, kernel_size=1, with_bias=False)
-        self.norm3 = SharedBN(inplanes=planes*self.expansion, normalizer=normalizer)
+
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
 
@@ -66,14 +67,15 @@ class SharedBottleneck(nn.Module):
         if self.training:
             def _inner_forward(x):
                 identity = x
-                out_ = self.conv1(x)
-                out_ = self.norm1(out_)
+                out_ = self.norm1(x)
                 out_ = [self.relu(out_[i]) for i in range(len(out_))]
-                out_ = self.conv2(out_)
+                out_ = self.conv1(out_)
                 out_ = self.norm2(out_)
                 out_ = [self.relu(out_[i]) for i in range(len(out_))]
-                out_ = self.conv3(out_)
+                out_ = self.conv2(out_)
                 out_ = self.norm3(out_)
+                out_ = [self.relu(out_[i]) for i in range(len(out_))]
+                out_ = self.conv3(out_)
                 if self.downsample is not None:
                     identity = self.downsample(x)
                 out_ = [out_[i] + identity[i] for i in range(len(out_))]
@@ -81,14 +83,15 @@ class SharedBottleneck(nn.Module):
         else:
             def _inner_forward(x):
                 identity = x
-                out_ = self.conv1(x)
-                out_ = self.norm1(out_)
+                out_ = self.norm1(x)
                 out_ = self.relu(out_)
-                out_ = self.conv2(out_)
+                out_ = self.conv1(out_)
                 out_ = self.norm2(out_)
                 out_ = self.relu(out_)
-                out_ = self.conv3(out_)
+                out_ = self.conv2(out_)
                 out_ = self.norm3(out_)
+                out_ = self.relu(out_)
+                out_ = self.conv3(out_)
                 if self.downsample is not None:
                     identity = self.downsample(x)
                 out_ = out_ + identity
@@ -98,10 +101,7 @@ class SharedBottleneck(nn.Module):
         else:
             out = _inner_forward(x)
 
-        if self.training:
-            return [self.relu(out[i]) for i in range(len(out))]
-        else:
-            return self.relu(out)
+        return out
 
 
 class Bottleneck(nn.Module):
@@ -152,10 +152,9 @@ class Bottleneck(nn.Module):
             self.conv1_stride = stride
             self.conv2_stride = 1
 
-        self.norm1_name, norm1 = build_norm_layer(norm_cfg, planes, postfix=1)
+        self.norm1_name, norm1 = build_norm_layer(norm_cfg, inplanes, postfix=1)
         self.norm2_name, norm2 = build_norm_layer(norm_cfg, planes, postfix=2)
-        self.norm3_name, norm3 = build_norm_layer(
-            norm_cfg, planes * self.expansion, postfix=3)
+        self.norm3_name, norm3 = build_norm_layer(norm_cfg, planes, postfix=3)
 
         self.conv1 = build_conv_layer(
             conv_cfg,
@@ -243,10 +242,11 @@ class Bottleneck(nn.Module):
         def _inner_forward(x):
             identity = x
 
-            out = self.conv1(x)
-            out = self.norm1(out)
+            out = self.norm1(x)
             out = self.relu(out)
+            out = self.conv1(out)
 
+            out = self.norm2(out)
             if not self.with_dcn:
                 out = self.conv2(out)
             elif self.with_modulated_dcn:
@@ -257,14 +257,12 @@ class Bottleneck(nn.Module):
             else:
                 offset = self.conv2_offset(out)
                 out = self.conv2(out, offset)
-            out = self.norm2(out)
-            out = self.relu(out)
 
             if self.with_gen_attention:
                 out = self.gen_attention_block(out)
 
-            out = self.conv3(out)
             out = self.norm3(out)
+            out = self.conv3(out)
 
             if self.with_gcb:
                 out = self.context_block(out)
@@ -280,8 +278,6 @@ class Bottleneck(nn.Module):
             out = cp.checkpoint(_inner_forward, x)
         else:
             out = _inner_forward(x)
-
-        out = self.relu(out)
 
         return out
 
@@ -302,16 +298,12 @@ def make_res_layer(block,
                    gen_attention_blocks=[]):
     downsample = None
     if stride != 1 or inplanes != planes * block.expansion:
-        downsample = nn.Sequential(
-            build_conv_layer(
-                conv_cfg,
-                inplanes,
-                planes * block.expansion,
-                kernel_size=1,
-                stride=stride,
-                bias=False),
-            build_norm_layer(norm_cfg, planes * block.expansion)[1],
-        )
+        downsample = build_conv_layer(conv_cfg,
+                                      inplanes,
+                                      planes * block.expansion,
+                                      kernel_size=1,
+                                      stride=stride,
+                                      bias=False)
 
     layers = []
     layers.append(
@@ -349,46 +341,52 @@ def make_res_layer(block,
     return nn.Sequential(*layers)
 
 
-def make_trid_res_layer(block,
-                        inplanes,
-                        planes,
-                        blocks,
-                        stride=1,
-                        dilation=1,
-                        norm_cfg=dict(type='BN'),
-                        dcn=None):
-    downsample = None
-    if stride != 1 or inplanes != planes * block.expansion:
-        downsample = nn.Sequential(
-            SharedConv(
-                inplanes,
-                planes * block.expansion,
-                kernel_size=1,
-                stride=stride,
-                with_bias=False),
-            SharedBN(planes * block.expansion),
-        )
-    layers = []
-    layers.append(
-        block(
-            inplanes,
-            planes,
-            stride,
-            dilation,
-            downsample,
-            norm_cfg=norm_cfg,
-            dcn=dcn))
-    inplanes = planes * block.expansion
-    for i in range(1, blocks):
-        layers.append(
-            block(
-                inplanes,
-                planes,
-                1,
-                dilation,
-                norm_cfg=norm_cfg,
-                dcn=dcn))
-    return nn.Sequential(*layers)
+class TridResLayer(nn.Module):
+    def __init__(self,
+                 block,
+                 inplanes,
+                 planes,
+                 blocks,
+                 stride=1,
+                 dilation=1,
+                 norm_cfg=dict(type='BN'),
+                 dcn=None):
+        super(TridResLayer, self).__init__()
+        downsample = None
+        if stride != 1 or inplanes != planes * block.expansion:
+            downsample = build_conv_layer(None,
+                                          inplanes,
+                                          planes * block.expansion,
+                                          kernel_size=1,
+                                          stride=stride,
+                                          bias=False)
+
+        self.layer0 = Bottleneck(inplanes,
+                                 planes,
+                                 stride,
+                                 dilation,
+                                 downsample,
+                                 norm_cfg=norm_cfg,
+                                 dcn=dcn)
+        layers = []
+        inplanes = planes * block.expansion
+        for i in range(1, blocks):
+            layers.append(
+                block(
+                    inplanes,
+                    planes,
+                    1,
+                    dilation,
+                    norm_cfg=norm_cfg,
+                    dcn=dcn))
+        self.layers = nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.layer0(x)
+        if self.training:
+            x = [x]*3
+        x = self.layers(x)
+        return x
 
 
 @BACKBONES.register_module
@@ -417,7 +415,7 @@ class SharedResNet(nn.Module):
     """
 
     arch_settings = {
-        50: (Bottleneck, (3, 4, 6, 3)),
+        50: (Bottleneck, (3, 4, 6, 3)),  # (Bottleneck, (3, 4, 6, 3)),
         101: (Bottleneck, (3, 4, 23, 3)),
         152: (Bottleneck, (3, 8, 36, 3))
     }
@@ -486,11 +484,11 @@ class SharedResNet(nn.Module):
             gcb = self.gcb if self.stage_with_gcb[i] else None
             planes = 64 * 2**i
             if i == self.shared_layer and self.shared:
-                res_layer = make_trid_res_layer(SharedBottleneck,
-                                                self.inplanes,
-                                                planes,
-                                                num_blocks,
-                                                norm_cfg=norm_cfg)
+                res_layer = TridResLayer(SharedBottleneck,
+                                         self.inplanes,
+                                         planes,
+                                         num_blocks,
+                                         norm_cfg=norm_cfg)
             else:
                 res_layer = make_res_layer(
                     self.block,
@@ -583,15 +581,12 @@ class SharedResNet(nn.Module):
         for i, layer_name in enumerate(self.res_layers):
             res_layer = getattr(self, layer_name)
 
+            x = res_layer(x)
             if i == self.shared_layer and self.shared and self.training:
-                x = [x for _ in range(3)]
-                x = res_layer(x)
                 c4_shape = list(x[0].shape)
                 c4_shape[0] *= 3
                 x = torch.stack(x, dim=1)
                 x = x.view(c4_shape)
-            else:
-                x = res_layer(x)
 
             if i in self.out_indices:
                 outs.append(x)

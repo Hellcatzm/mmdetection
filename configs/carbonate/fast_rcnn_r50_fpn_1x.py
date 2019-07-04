@@ -1,7 +1,8 @@
 # model settings
 model = dict(
     type='TridentRCNN',
-    pretrained='modelzoo://resnet50',
+    pretrained=None,  # 'modelzoo://resnet50',
+    val_range=((0, 20), (15, 35), (35, -1)),
     backbone=dict(
         type='SharedResNet',
         depth=50,
@@ -14,7 +15,7 @@ model = dict(
         type='RPNHead',
         in_channels=1024,
         feat_channels=1024,
-        anchor_scales=[1/4, 1/2, 1, 2, 4, 8],
+        anchor_scales=(2, 4, 8, 16, 32),
         anchor_ratios=[0.5, 1.0, 2.0],
         anchor_strides=[16],
         target_means=[.0, .0, .0, .0],
@@ -25,7 +26,7 @@ model = dict(
     bbox_roi_extractor=dict(
         type='SingleRoIExtractor',
         roi_layer=dict(type='RoIAlign', out_size=7, sample_num=2),
-        out_channels=1024,
+        out_channels=512,
         featmap_strides=[16]),
     bbox_head=dict(
         type='SharedFCBBoxHead',
@@ -47,7 +48,7 @@ train_cfg = dict(
             type='MaxIoUAssigner',
             pos_iou_thr=0.7,
             neg_iou_thr=0.3,
-            min_pos_iou=0.3,
+            min_pos_iou=0.0,
             ignore_iof_thr=-1),
         sampler=dict(
             type='RandomSampler',
@@ -60,9 +61,9 @@ train_cfg = dict(
         debug=False),
     rpn_proposal=dict(
         nms_across_levels=False,
-        nms_pre=2000,
-        nms_post=2000,
-        max_num=2000,
+        nms_pre=12000,
+        nms_post=500,
+        max_num=500,
         nms_thr=0.7,
         min_bbox_size=0),
     rcnn=dict(
@@ -154,10 +155,10 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 12
+total_epochs = 25
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
-work_dir = './work_dirs/faster_rcnn_r50_fpn_1x'
+work_dir = './work_dirs/fast_rcnn_r50_fpn_1x'
 load_from = None
 resume_from = None
 workflow = [('train', 1)]

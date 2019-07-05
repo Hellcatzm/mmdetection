@@ -14,6 +14,26 @@ from mmdet.models.plugins import GeneralizedAttention
 from ..registry import BACKBONES
 from ..utils import build_conv_layer, build_norm_layer, SharedConv, SharedDeformConv, SharedBN
 
+gradient = []
+
+def backward_hook(module, grad_input, grad_output):
+    print(module)
+    print(len(grad_output))
+    for g in grad_output:
+        print('out: ', g.shape)
+        print(g.sum())
+    for g in grad_input:
+        if g is not None:
+            print('in: ', g.shape)
+            print(g.sum())
+    print("-"*100)
+
+def hook(grad):
+    print("*"*100)
+    print(grad.shape)
+    print([g.sum() for g in grad])
+    gradient.append(grad)
+    print("*" * 100)
 
 class SharedBottleneck(nn.Module):
 
@@ -60,7 +80,7 @@ class SharedBottleneck(nn.Module):
         self.conv3 = SharedConv(inplanes=planes, planes=planes*self.expansion,
                                 stride=1, dilate=1, kernel_size=1, with_bias=False)
 
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU()
         self.downsample = downsample
 
     def forward(self, x):
@@ -152,9 +172,9 @@ class Bottleneck(nn.Module):
             self.conv1_stride = stride
             self.conv2_stride = 1
 
-        self.norm1_name, norm1 = build_norm_layer(norm_cfg, inplanes, postfix=1)
+        self.norm1_name, norm1 = build_norm_layer(norm_cfg, planes, postfix=1)
         self.norm2_name, norm2 = build_norm_layer(norm_cfg, planes, postfix=2)
-        self.norm3_name, norm3 = build_norm_layer(norm_cfg, planes, postfix=3)
+        self.norm3_name, norm3 = build_norm_layer(norm_cfg, planes * self.expansion, postfix=3)
 
         self.conv1 = build_conv_layer(
             conv_cfg,
@@ -224,6 +244,7 @@ class Bottleneck(nn.Module):
         if self.with_gen_attention:
             self.gen_attention_block = GeneralizedAttention(
                 planes, **gen_attention)
+        # self.bn3.register_backward_hook(backward_hook)
 
     @property
     def norm1(self):
@@ -242,11 +263,11 @@ class Bottleneck(nn.Module):
         def _inner_forward(x):
             identity = x
 
-            out = self.norm1(x)
+            out = self.conv1(x)
+            out = self.norm1(out)
             out = self.relu(out)
-            out = self.conv1(out)
 
-            out = self.norm2(out)
+
             if not self.with_dcn:
                 out = self.conv2(out)
             elif self.with_modulated_dcn:
@@ -260,9 +281,10 @@ class Bottleneck(nn.Module):
 
             if self.with_gen_attention:
                 out = self.gen_attention_block(out)
+            out = self.norm2(out)
 
-            out = self.norm3(out)
             out = self.conv3(out)
+            out = self.norm3(out)
 
             if self.with_gcb:
                 out = self.context_block(out)
@@ -348,7 +370,7 @@ class TridResLayer(nn.Module):
                  planes,
                  blocks,
                  stride=1,
-                 dilation=1,
+                 dilation=(1, 2, 3),
                  norm_cfg=dict(type='BN'),
                  dcn=None):
         super(TridResLayer, self).__init__()
@@ -364,14 +386,14 @@ class TridResLayer(nn.Module):
         self.layer0 = Bottleneck(inplanes,
                                  planes,
                                  stride,
-                                 dilation,
+                                 1,
                                  downsample,
                                  norm_cfg=norm_cfg,
                                  dcn=dcn)
-        layers = []
+        layers_ = []
         inplanes = planes * block.expansion
         for i in range(1, blocks):
-            layers.append(
+            layers_.append(
                 block(
                     inplanes,
                     planes,
@@ -379,7 +401,7 @@ class TridResLayer(nn.Module):
                     dilation,
                     norm_cfg=norm_cfg,
                     dcn=dcn))
-        self.layers = nn.Sequential(*layers)
+        self.layers = nn.Sequential(*layers_)
 
     def forward(self, x):
         x = self.layer0(x)
@@ -415,7 +437,7 @@ class SharedResNet(nn.Module):
     """
 
     arch_settings = {
-        50: (Bottleneck, (3, 4, 6, 3)),  # (Bottleneck, (3, 4, 6, 3)),
+        50: (Bottleneck, (2, 2, 2, 2)),  # (Bottleneck, (3, 4, 6, 3)),
         101: (Bottleneck, (3, 4, 23, 3)),
         152: (Bottleneck, (3, 8, 36, 3))
     }
@@ -515,6 +537,7 @@ class SharedResNet(nn.Module):
 
         self.feat_dim = self.block.expansion * 64 * 2**(
             len(self.stage_blocks) - 1)
+        self.gradient = gradient
 
     @property
     def norm1(self):
@@ -583,10 +606,12 @@ class SharedResNet(nn.Module):
 
             x = res_layer(x)
             if i == self.shared_layer and self.shared and self.training:
+                [t.register_hook(hook) for t in x]
                 c4_shape = list(x[0].shape)
                 c4_shape[0] *= 3
                 x = torch.stack(x, dim=1)
                 x = x.view(c4_shape)
+                x.register_hook(hook)
 
             if i in self.out_indices:
                 outs.append(x)

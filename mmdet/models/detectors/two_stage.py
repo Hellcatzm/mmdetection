@@ -7,6 +7,24 @@ from .. import builder
 from ..registry import DETECTORS
 from mmdet.core import bbox2roi, bbox2result, build_assigner, build_sampler
 
+gradient = []
+def hook(grad):
+    print("*"*100)
+    print('x')
+    print(grad.shape)
+    print([g.sum() for g in grad])
+    gradient.append(grad)
+    print("*" * 100)
+
+def backward_hook(module, grad_input, grad_output):
+
+    for g in grad_output:
+        print('out: ', g.shape)
+        print(g.sum())
+    for g in grad_input:
+        print('in: ', g.shape)
+        print(g.sum())
+    print("*" * 100)
 
 @DETECTORS.register_module
 class TwoStageDetector(BaseDetector, RPNTestMixin, BBoxTestMixin,
@@ -55,6 +73,8 @@ class TwoStageDetector(BaseDetector, RPNTestMixin, BBoxTestMixin,
         self.test_cfg = test_cfg
 
         self.init_weights(pretrained=pretrained)
+        self.gradient = gradient
+        # self.backbone.register_backward_hook(backward_hook)
 
     @property
     def with_rpn(self):
@@ -96,7 +116,7 @@ class TwoStageDetector(BaseDetector, RPNTestMixin, BBoxTestMixin,
                       gt_masks=None,
                       proposals=None):
         x = self.extract_feat(img)
-
+        x[0].register_hook(hook)
         losses = dict()
 
         # RPN forward and loss

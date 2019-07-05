@@ -26,7 +26,7 @@ def backward_hook(module, grad_input, grad_output):
 
 HOOT_MODE = "train"  # "inference" or "train"
 ROOT_DIR = '/home/hellcatzm/mmdetection'
-CONFIG_NAME = 'configs/carbonate/fast_rcnn_r50_fpn_1x.py'
+CONFIG_NAME = 'configs/carbonate/faster_rcnn_r50_fpn_1x.py'
 
 config_file = os.path.join(ROOT_DIR, CONFIG_NAME)
 cfg = mmcv.Config.fromfile(config_file)
@@ -75,7 +75,7 @@ elif HOOT_MODE == "train":
     在感兴趣的层注册钩子查看数据流
     """
     # _____________________________________________________________________
-    for batch_data in iter(dataloader):
+    for i, batch_data in enumerate(iter(dataloader)):
         losses = model(img=batch_data['img'].data[0].cuda(),
                        img_meta=batch_data['img_meta'].data[0],
                        gt_bboxes=[t.cuda() for t in batch_data['gt_bboxes'].data[0]],

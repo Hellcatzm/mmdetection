@@ -13,6 +13,23 @@ from mmdet.models.plugins import GeneralizedAttention
 from ..registry import BACKBONES
 from ..utils import build_conv_layer, build_norm_layer
 
+def backward_hook(module, grad_input, grad_output):
+    print(module)
+    print(len(grad_output))
+    for g in grad_output:
+        print('out: ', g.shape)
+        print(g.sum())
+    for g in grad_input:
+        if g is not None:
+            print('in: ', g.shape)
+            print(g.sum())
+    print("-"*100)
+
+def hook(grad):
+    print("*"*100)
+    print(grad.shape)
+    print([g.sum() for g in grad])
+    print("*" * 100)
 
 class BasicBlock(nn.Module):
     expansion = 1
@@ -206,6 +223,9 @@ class Bottleneck(nn.Module):
         if self.with_gen_attention:
             self.gen_attention_block = GeneralizedAttention(
                 planes, **gen_attention)
+        # self.relu.register_backward_hook(backward_hook)
+        self.bn3.register_backward_hook(backward_hook)
+        # self.conv3.register_backward_hook(backward_hook)
 
     @property
     def norm1(self):
@@ -358,7 +378,7 @@ class ResNet(nn.Module):
     arch_settings = {
         18: (BasicBlock, (2, 2, 2, 2)),
         34: (BasicBlock, (3, 4, 6, 3)),
-        50: (Bottleneck, (3, 4, 6, 3)),
+        50: (Bottleneck, (2, 2, 2, 2)),
         101: (Bottleneck, (3, 4, 23, 3)),
         152: (Bottleneck, (3, 8, 36, 3))
     }
@@ -514,6 +534,7 @@ class ResNet(nn.Module):
             res_layer = getattr(self, layer_name)
             x = res_layer(x)
             if i in self.out_indices:
+                x.register_hook(hook)
                 outs.append(x)
         return tuple(outs)
 

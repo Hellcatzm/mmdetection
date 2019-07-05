@@ -5,6 +5,15 @@ from .two_stage import TwoStageDetector
 from ..registry import DETECTORS
 from mmdet.core import bbox2roi, bbox2result, build_assigner, build_sampler
 
+gradient = []
+def hook(grad):
+    print("*"*100)
+    print('x')
+    print(grad.shape)
+    print([g.sum() for g in grad])
+    gradient.append(grad)
+    print("*" * 100)
+
 
 @DETECTORS.register_module
 class TridentRCNN(TwoStageDetector):
@@ -19,7 +28,7 @@ class TridentRCNN(TwoStageDetector):
                  neck=None,
                  shared_head=None,
                  pretrained=None,
-                 val_range=((0, 10), (5, 15), (15, -1)),
+                 val_range=((0, 90), (60, 160), (90, -1)),
                  **kwargs):
         super(TridentRCNN, self).__init__(
             backbone=backbone,
@@ -32,12 +41,11 @@ class TridentRCNN(TwoStageDetector):
             test_cfg=test_cfg,
             pretrained=pretrained)
         self.val_range = val_range
-
-    def extract_feat(self, img):
-        x = self.backbone(img)
-        if self.with_neck:
-            x = self.neck(x)
-        return x
+        self.gradient = gradient
+        # # self.rpn_head.register_forward_hook(forward_hook)
+        # # self.backbone.register_backward_hook(backward_hook)
+        # self.neck.register_backward_hook(backward_hook)
+        # self.gradient = gradient
 
     def forward_train(self,
                       img,
@@ -48,12 +56,12 @@ class TridentRCNN(TwoStageDetector):
                       gt_masks=None,
                       proposals=None):
         x = self.extract_feat(img)
+        x[0].register_hook(hook)
         # c4_shape = list(x[0].shape)
         # c4_shape[0] *= 3
         # x = torch.stack([x[0]]*3, dim=1)
         # x = [x.view(c4_shape)]
 
-        self.val_range = ((0, 90), (60, 160), (90, -1))
         img_meta_ = list()
         gt_bboxes_ = list()
         gt_labels_ = list()
@@ -63,38 +71,40 @@ class TridentRCNN(TwoStageDetector):
         val_pointer = -1
         for img_num in range(img.size(0)):
             for lo, hi in self.val_range:
-                # val_pointer += 1
-                # bboxes_hw = gt_bboxes[img_num][:, 2:] - gt_bboxes[img_num][:, :2]
-                # boxes_area = (bboxes_hw[:, 0] * bboxes_hw[:, 1]).clamp(min=0)
-                # if hi >= 0:
-                #     boxes_index = (boxes_area > lo ** 2) & (boxes_area < hi ** 2)
-                # else:
-                #     boxes_index = boxes_area > lo ** 2
-                # if boxes_index.int().sum():
-                #     val_index[val_pointer] = 1
-                #     arg_idx = torch.nonzero(boxes_index).squeeze()
-                #     img_meta_.append(img_meta[img_num])
-                #     gt_bboxes_.append(gt_bboxes[img_num][arg_idx])  # [3n, [gts_v, 4]]
-                #     gt_labels_.append(gt_labels[img_num][arg_idx])  # [3n, [gts_v]]
-                #     # gt_masks_.append(gt_masks[img_num][arg_idx.cpu()])
-                #     gt_bboxes_ignore_.append(gt_bboxes_ignore[img_num])
-                #     if arg_idx.numel() == 1:
-                #         gt_bboxes_[-1].unsqueeze_(dim=0)
-                #         gt_labels_[-1].unsqueeze_(dim=0)
+                val_pointer += 1
+                bboxes_hw = gt_bboxes[img_num][:, 2:] - gt_bboxes[img_num][:, :2]
+                boxes_area = (bboxes_hw[:, 0] * bboxes_hw[:, 1]).clamp(min=0)
+                if hi >= 0:
+                    boxes_index = (boxes_area > lo ** 2) & (boxes_area < hi ** 2)
+                else:
+                    boxes_index = boxes_area > lo ** 2
+                if boxes_index.int().sum():
+                    val_index[val_pointer] = 1
+                    arg_idx = torch.nonzero(boxes_index).squeeze()
+                    img_meta_.append(img_meta[img_num])
+                    gt_bboxes_.append(gt_bboxes[img_num][arg_idx])  # [3n, [gts_v, 4]]
+                    gt_labels_.append(gt_labels[img_num][arg_idx])  # [3n, [gts_v]]
+                    # gt_masks_.append(gt_masks[img_num][arg_idx.cpu()])
+                    gt_bboxes_ignore_.append(gt_bboxes_ignore[img_num])
+                    if arg_idx.numel() == 1:
+                        gt_bboxes_[-1].unsqueeze_(dim=0)
+                        gt_labels_[-1].unsqueeze_(dim=0)
                         # gt_masks_[-1] = gt_masks_[-1][None]
-                img_meta_.append(img_meta[img_num])
-                gt_bboxes_.append(gt_bboxes[img_num])  # [3n, [gts_v, 4]]
-                gt_labels_.append(gt_labels[img_num])  # [3n, [gts_v]]
-                # gt_masks_.append(gt_masks[img_num][arg_idx.cpu()])
-                gt_bboxes_ignore_.append(gt_bboxes_ignore[img_num])
+                # img_meta_.append(img_meta[img_num])
+                # gt_bboxes_.append(gt_bboxes[img_num])  # [3n, [gts_v, 4]]
+                # gt_labels_.append(gt_labels[img_num])  # [3n, [gts_v]]
+                # # gt_masks_.append(gt_masks[img_num][arg_idx.cpu()])
+                # gt_bboxes_ignore_.append(gt_bboxes_ignore[img_num])
+
         img_meta = img_meta_
         gt_bboxes = gt_bboxes_
         gt_labels = gt_labels_
         gt_bboxes_ignore = gt_bboxes_ignore_
-        # idx = torch.nonzero(val_index).squeeze()
-        # x = x[0][idx][None]
-        # if idx.numel() == 1:
-        #     x = x[None]
+
+        idx = torch.nonzero(val_index).squeeze()
+        x = x[0][idx][None]
+        if idx.numel() == 1:
+            x = x[None]
 
         losses = dict()
 
@@ -119,7 +129,7 @@ class TridentRCNN(TwoStageDetector):
             bbox_assigner = build_assigner(self.train_cfg.rcnn.assigner)
             bbox_sampler = build_sampler(
                 self.train_cfg.rcnn.sampler, context=self)
-            num_imgs = img.size(0)
+            num_imgs = len(img_meta)
             if gt_bboxes_ignore is None:
                 gt_bboxes_ignore = [None for _ in range(num_imgs)]
             sampling_results = []
@@ -137,12 +147,15 @@ class TridentRCNN(TwoStageDetector):
 
         # bbox head forward and loss
         if self.with_bbox:
+            self.sr = sampling_results
             rois = bbox2roi([res.bboxes for res in sampling_results])
             # TODO: a more flexible way to decide which feature maps to use
             bbox_feats = self.bbox_roi_extractor(
                 x[:self.bbox_roi_extractor.num_inputs], rois)
             if self.with_shared_head:
                 bbox_feats = self.shared_head(bbox_feats)
+            self.bf = bbox_feats, rois
+            # bbox_feats.register_hook(hook)
             cls_score, bbox_pred = self.bbox_head(bbox_feats)
 
             bbox_targets = self.bbox_head.get_target(
@@ -193,23 +206,23 @@ class TridentRCNN(TwoStageDetector):
 
         return losses
 
-    def simple_test(self, img, img_meta, proposals=None, rescale=False):
-        """Test without augmentation."""
-        assert self.with_bbox, "Bbox head must be implemented."
-
-        x = self.extract_feat(img)
-
-        proposal_list = self.simple_test_rpn(
-            x, img_meta, self.test_cfg.rpn) if proposals is None else proposals
-
-        det_bboxes, det_labels = self.simple_test_bboxes(
-            x, img_meta, proposal_list, self.test_cfg.rcnn, rescale=rescale)
-        bbox_results = bbox2result(det_bboxes, det_labels,
-                                   self.bbox_head.num_classes)
-
-        if not self.with_mask:
-            return bbox_results
-        else:
-            segm_results = self.simple_test_mask(
-                x, img_meta, det_bboxes, det_labels, rescale=rescale)
-            return bbox_results, segm_results
+    # def simple_test(self, img, img_meta, proposals=None, rescale=False):
+    #     """Test without augmentation."""
+    #     assert self.with_bbox, "Bbox head must be implemented."
+    #
+    #     x = self.extract_feat(img)
+    #
+    #     proposal_list = self.simple_test_rpn(
+    #         x, img_meta, self.test_cfg.rpn) if proposals is None else proposals
+    #
+    #     det_bboxes, det_labels = self.simple_test_bboxes(
+    #         x, img_meta, proposal_list, self.test_cfg.rcnn, rescale=rescale)
+    #     bbox_results = bbox2result(det_bboxes, det_labels,
+    #                                self.bbox_head.num_classes)
+    #
+    #     if not self.with_mask:
+    #         return bbox_results
+    #     else:
+    #         segm_results = self.simple_test_mask(
+    #             x, img_meta, det_bboxes, det_labels, rescale=rescale)
+    #         return bbox_results, segm_results

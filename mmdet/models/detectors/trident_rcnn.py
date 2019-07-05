@@ -5,15 +5,26 @@ from .two_stage import TwoStageDetector
 from ..registry import DETECTORS
 from mmdet.core import bbox2roi, bbox2result, build_assigner, build_sampler
 
-gradient = []
-def hook(grad):
-    print("*"*100)
-    print('x')
-    print(grad.shape)
-    print([g.sum() for g in grad])
-    gradient.append(grad)
-    print("*" * 100)
-
+# gradient = []
+# gradient1 = []
+# def hook(grad):
+#     print("*"*100)
+#     print('x')
+#     print(grad.shape)
+#     print([g.sum() for g in grad])
+#     gradient.append(grad)
+#     print("*" * 100)
+# def backward_hook(module, grad_input, grad_output):
+#     gradient1.append(grad_output)
+#     gradient1.append(grad_input)
+#     for g in grad_output:
+#         print('out: ', g.shape)
+#         print(g.sum())
+#     for g in grad_input:
+#         if g is not None:
+#             print('in: ', g.shape)
+#             print(g.sum())
+#     print("*" * 100)
 
 @DETECTORS.register_module
 class TridentRCNN(TwoStageDetector):
@@ -41,7 +52,8 @@ class TridentRCNN(TwoStageDetector):
             test_cfg=test_cfg,
             pretrained=pretrained)
         self.val_range = val_range
-        self.gradient = gradient
+        # self.g = gradient
+        # self.g1 = gradient1
         # # self.rpn_head.register_forward_hook(forward_hook)
         # # self.backbone.register_backward_hook(backward_hook)
         # self.neck.register_backward_hook(backward_hook)
@@ -56,7 +68,8 @@ class TridentRCNN(TwoStageDetector):
                       gt_masks=None,
                       proposals=None):
         x = self.extract_feat(img)
-        x[0].register_hook(hook)
+        self.x = x
+        # x[0].register_hook(hook)
         # c4_shape = list(x[0].shape)
         # c4_shape[0] *= 3
         # x = torch.stack([x[0]]*3, dim=1)
@@ -104,7 +117,7 @@ class TridentRCNN(TwoStageDetector):
         idx = torch.nonzero(val_index).squeeze()
         x = x[0][idx][None]
         if idx.numel() == 1:
-            x = x[None]
+            x = [x,]
 
         losses = dict()
 
@@ -150,8 +163,11 @@ class TridentRCNN(TwoStageDetector):
             self.sr = sampling_results
             rois = bbox2roi([res.bboxes for res in sampling_results])
             # TODO: a more flexible way to decide which feature maps to use
+
+            # self.bbox_roi_extractor.register_backward_hook(backward_hook)
             bbox_feats = self.bbox_roi_extractor(
                 x[:self.bbox_roi_extractor.num_inputs], rois)
+            # bbox_feats.register_hook(hook)
             if self.with_shared_head:
                 bbox_feats = self.shared_head(bbox_feats)
             self.bf = bbox_feats, rois
@@ -160,7 +176,7 @@ class TridentRCNN(TwoStageDetector):
 
             bbox_targets = self.bbox_head.get_target(
                 sampling_results, gt_bboxes, gt_labels, self.train_cfg.rcnn)
-
+            self.bt = bbox_targets, cls_score, bbox_pred
             s = torch.argmax(cls_score, dim=1)
             print("ACC:",
                   (s[bbox_targets[0]>0]==bbox_targets[0][bbox_targets[0]>0]).sum().float()/float(s[bbox_targets[0]>0].numel()))

@@ -16,24 +16,24 @@ from ..utils import build_conv_layer, build_norm_layer, SharedConv, SharedDeform
 
 gradient = []
 
-def backward_hook(module, grad_input, grad_output):
-    print(module)
-    print(len(grad_output))
-    for g in grad_output:
-        print('out: ', g.shape)
-        print(g.sum())
-    for g in grad_input:
-        if g is not None:
-            print('in: ', g.shape)
-            print(g.sum())
-    print("-"*100)
-
-def hook(grad):
-    print("*"*100)
-    print(grad.shape)
-    print([g.sum() for g in grad])
-    gradient.append(grad)
-    print("*" * 100)
+# def backward_hook(module, grad_input, grad_output):
+#     print(module)
+#     print(len(grad_output))
+#     for g in grad_output:
+#         print('out: ', g.shape)
+#         print(g.sum())
+#     for g in grad_input:
+#         if g is not None:
+#             print('in: ', g.shape)
+#             print(g.sum())
+#     print("-"*100)
+#
+# def hook(grad):
+#     print("*"*100)
+#     print(grad.shape)
+#     print([g.sum() for g in grad])
+#     gradient.append(grad)
+#     print("*" * 100)
 
 class SharedBottleneck(nn.Module):
 
@@ -57,11 +57,11 @@ class SharedBottleneck(nn.Module):
         else:
             normalizer = nn.SyncBatchNorm
 
-        self.norm1 = SharedBN(inplanes=inplanes, normalizer=normalizer)
+
         self.conv1 = SharedConv(inplanes=inplanes, planes=planes,
                                 stride=1, dilate=1, kernel_size=1, with_bias=False)
+        self.norm1 = SharedBN(inplanes=planes, normalizer=normalizer)
 
-        self.norm2 = SharedBN(inplanes=planes, normalizer=normalizer)
         fallback_on_stride = False
         self.with_modulated_dcn = False
         if self.with_dcn:
@@ -75,10 +75,11 @@ class SharedBottleneck(nn.Module):
             self.conv2 = SharedDeformConv(inplanes=inplanes, planes=planes,
                                           stride=stride, dilate=dilate, pad=dilate,
                                           kernel_size=3, deformable_groups=deformable_groups)
+        self.norm2 = SharedBN(inplanes=planes, normalizer=normalizer)
 
-        self.norm3 = SharedBN(inplanes=planes, normalizer=normalizer)
         self.conv3 = SharedConv(inplanes=planes, planes=planes*self.expansion,
                                 stride=1, dilate=1, kernel_size=1, with_bias=False)
+        self.norm3 = SharedBN(inplanes=planes*self.expansion, normalizer=normalizer)
 
         self.relu = nn.ReLU()
         self.downsample = downsample
@@ -87,34 +88,35 @@ class SharedBottleneck(nn.Module):
         if self.training:
             def _inner_forward(x):
                 identity = x
-                out_ = self.norm1(x)
-                out_ = [self.relu(out_[i]) for i in range(len(out_))]
-                out_ = self.conv1(out_)
-                out_ = self.norm2(out_)
+                out_ = self.conv1(x)
+                out_ = self.norm1(out_)
                 out_ = [self.relu(out_[i]) for i in range(len(out_))]
                 out_ = self.conv2(out_)
-                out_ = self.norm3(out_)
+                out_ = self.norm2(out_)
                 out_ = [self.relu(out_[i]) for i in range(len(out_))]
                 out_ = self.conv3(out_)
+                out_ = self.norm3(out_)
+
                 if self.downsample is not None:
                     identity = self.downsample(x)
                 out_ = [out_[i] + identity[i] for i in range(len(out_))]
+                out_ = [self.relu(out_[i]) for i in range(len(out_))]
                 return out_
         else:
             def _inner_forward(x):
                 identity = x
-                out_ = self.norm1(x)
-                out_ = self.relu(out_)
-                out_ = self.conv1(out_)
-                out_ = self.norm2(out_)
+                out_ = self.conv1(x)
+                out_ = self.norm1(out_)
                 out_ = self.relu(out_)
                 out_ = self.conv2(out_)
-                out_ = self.norm3(out_)
+                out_ = self.norm2(out_)
                 out_ = self.relu(out_)
                 out_ = self.conv3(out_)
+                out_ = self.norm3(out_)
                 if self.downsample is not None:
                     identity = self.downsample(x)
                 out_ = out_ + identity
+                out_ = self.relu(out_)
                 return out_
         if self.with_cp and x.requires_grad:
             out = cp.checkpoint(_inner_forward, x)
@@ -267,7 +269,6 @@ class Bottleneck(nn.Module):
             out = self.norm1(out)
             out = self.relu(out)
 
-
             if not self.with_dcn:
                 out = self.conv2(out)
             elif self.with_modulated_dcn:
@@ -278,10 +279,11 @@ class Bottleneck(nn.Module):
             else:
                 offset = self.conv2_offset(out)
                 out = self.conv2(out, offset)
+            out = self.norm2(out)
+            out = self.relu(out)
 
             if self.with_gen_attention:
                 out = self.gen_attention_block(out)
-            out = self.norm2(out)
 
             out = self.conv3(out)
             out = self.norm3(out)
@@ -300,6 +302,8 @@ class Bottleneck(nn.Module):
             out = cp.checkpoint(_inner_forward, x)
         else:
             out = _inner_forward(x)
+
+        out = self.relu(out)
 
         return out
 
@@ -606,12 +610,12 @@ class SharedResNet(nn.Module):
 
             x = res_layer(x)
             if i == self.shared_layer and self.shared and self.training:
-                [t.register_hook(hook) for t in x]
+                # [t.register_hook(hook) for t in x]
                 c4_shape = list(x[0].shape)
                 c4_shape[0] *= 3
                 x = torch.stack(x, dim=1)
                 x = x.view(c4_shape)
-                x.register_hook(hook)
+                # x.register_hook(hook)
 
             if i in self.out_indices:
                 outs.append(x)

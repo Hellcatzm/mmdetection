@@ -1,14 +1,14 @@
 # model settings
 model = dict(
     type='TridentRCNN',
-    pretrained='modelzoo://resnet50',
+    pretrained=None,  # 'modelzoo://resnet50',
     val_range=((0, 90), (60, 160), (90, -1)),
     backbone=dict(
         type='SharedResNet',
         depth=50,
         out_indices=(2,),
         if_shared=True,
-        shared_layer=0,
+        shared_layer=2,
     ),
     neck=dict(
         type='FPN',
@@ -56,7 +56,7 @@ train_cfg = dict(
             ignore_iof_thr=-1),
         sampler=dict(
             type='RandomSampler',
-            num=256,
+            num=500,
             pos_fraction=0.5,
             neg_pos_ub=-1,
             add_gt_as_proposals=False),
@@ -66,8 +66,8 @@ train_cfg = dict(
     rpn_proposal=dict(
         nms_across_levels=False,
         nms_pre=2000,
-        nms_post=2000,
-        max_num=2000,
+        nms_post=512,
+        max_num=512,
         nms_thr=0.7,
         min_bbox_size=0),
     rcnn=dict(
@@ -79,7 +79,7 @@ train_cfg = dict(
             ignore_iof_thr=-1),
         sampler=dict(
             type='RandomSampler',
-            num=256,  # roi数目
+            num=128,  # roi数目
             pos_fraction=0.5,
             neg_pos_ub=-1,
             add_gt_as_proposals=True),
@@ -159,7 +159,7 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 12
+total_epochs = 50
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/faster_rcnn_r50_fpn_1x'

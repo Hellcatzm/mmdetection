@@ -69,11 +69,12 @@ class TridentRCNN(TwoStageDetector):
                       proposals=None):
         x = self.extract_feat(img)
         self.x = x
-        # x[0].register_hook(hook)
-        # c4_shape = list(x[0].shape)
-        # c4_shape[0] *= 3
-        # x = torch.stack([x[0]]*3, dim=1)
-        # x = [x.view(c4_shape)]
+        if not self.backbone.shared:
+            # x[0].register_hook(hook)
+            c4_shape = list(x[0].shape)
+            c4_shape[0] *= 3
+            x = torch.stack([x[0]]*3, dim=1)
+            x = [x.view(c4_shape)]
 
         img_meta_ = list()
         gt_bboxes_ = list()

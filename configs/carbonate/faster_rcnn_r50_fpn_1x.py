@@ -7,7 +7,7 @@ model = dict(
         type='SharedResNet',
         depth=50,
         out_indices=(2,),
-        if_shared=True,
+        if_shared=False,
         shared_layer=2,
     ),
     neck=dict(

@@ -26,7 +26,7 @@ def backward_hook(module, grad_input, grad_output):
 
 HOOT_MODE = "train"  # "inference" or "train"
 ROOT_DIR = '/home/hellcatzm/mmdetection'
-CONFIG_NAME = 'configs/carbonate/faster_rcnn_r50_fpn_1x.py'
+CONFIG_NAME = 'configs/carbonate/trident_rcnn_r50_fpn_1x.py'
 
 config_file = os.path.join(ROOT_DIR, CONFIG_NAME)
 cfg = mmcv.Config.fromfile(config_file)

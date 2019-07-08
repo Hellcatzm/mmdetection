@@ -33,6 +33,7 @@ class SharedBottleneck(nn.Module):
         assert dcn is None or isinstance(dcn, dict)
         self.with_cp = with_cp
         self.with_dcn = dcn is not None
+        self.dcn = dcn
         if norm_cfg.get('type', 'BN') == 'BN':
             normalizer = nn.BatchNorm2d
         else:
@@ -51,7 +52,6 @@ class SharedBottleneck(nn.Module):
             self.conv2 = SharedConv2d(in_channels=planes, out_channels=planes,
                                       kernel_size=3, stride=stride, dilation=dilate, padding=dilate, bias=False)
         else:
-            assert self.conv_cfg is None, 'conv_cfg must be None for DCN'
             groups = self.dcn.get('groups', 1)
             deformable_groups = self.dcn.get('deformable_groups', 1)
             if not self.with_modulated_dcn:

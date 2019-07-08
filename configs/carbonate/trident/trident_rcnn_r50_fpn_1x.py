@@ -1,20 +1,22 @@
 # model settings
 model = dict(
     type='TridentRCNN',
-    pretrained='modelzoo://resnet50',
-    val_range=((0, 90), (30, 160), (90, -1)),
+    pretrained=None,  # 'modelzoo://resnet50',
+    scale_aware=True,
+    valid_range=((0, 90), (30, 160), (90, -1)),
     backbone=dict(
         type='SharedResNet',
         depth=50,
         out_indices=(2,),
         shared_layer=2,
-        shared=True),
+        shared=True,
+        norm_cfg=dict(type='SyncBN', requires_grad=True),
         dcn=dict(
             modulated=True,
-            groups=64,
+            groups=1,
             deformable_groups=1,
             fallback_on_stride=False),
-        stage_with_dcn=(False, True, True, True),
+        stage_with_dcn=(False, True, True, True)),
     # neck=dict(
     #     type='FPN',
     #     in_channels=[1024],
@@ -164,7 +166,7 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 12
+total_epochs = 26
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = 'work_dirs/trident_rcnn_r50_fpn_1x_carb'

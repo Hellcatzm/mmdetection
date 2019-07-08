@@ -94,7 +94,7 @@ class SharedDeformConv(nn.Module):
                  stride=(1, 1, 1),
                  dilate=(1, 2, 3),
                  pad=(0, 0, 0),
-                 deformable_groups=4,
+                 deformable_groups=1,
                  share_weight=True):
         super(SharedDeformConv, self).__init__()
         self.shared_conv = nn.ModuleList()

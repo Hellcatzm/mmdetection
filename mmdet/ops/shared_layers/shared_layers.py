@@ -126,18 +126,17 @@ class SharedDeformConv2d(nn.Module):
                  dilation=(1, 2, 3),
                  padding=(1, 2, 3),
                  groups=1,
-                 deformable_groups=4):
+                 deformable_groups=1):
         super(SharedDeformConv2d, self).__init__()
         self.shared_conv = nn.ModuleList()
         self.offset_conv = nn.ModuleList()
-
         if conv_op == DeformConv:
             offset_channels = 18
         elif conv_op == ModulatedDeformConv:
             offset_channels = 27
         else:
             assert TypeError, "conv_op must be DeformConv or ModulatedDeformConv"
-        self.weight = Parameter(torch.empty(out_channels, in_channels, kernel_size, kernel_size))
+        # self.weight = Parameter(torch.empty(out_channels, in_channels, kernel_size, kernel_size))
 
         for i in range(paths):
             stride_i = stride[i] if isinstance(stride, (list, tuple)) else stride
@@ -145,13 +144,13 @@ class SharedDeformConv2d(nn.Module):
             pad_i = padding[i] if isinstance(padding, (list, tuple)) else padding
             offset_conv_i = nn.Conv2d(in_channels,
                                       deformable_groups * offset_channels,
-                                      kernel_size=3,
+                                      kernel_size=kernel_size,
                                       stride=stride_i,
                                       dilation=dilate_i,
                                       padding=pad_i,)
             conv_i = conv_op(in_channels,
                              out_channels,
-                             kernel_size,
+                             kernel_size=kernel_size,
                              bias=False,
                              stride=stride_i,
                              dilation=dilate_i,
@@ -159,7 +158,10 @@ class SharedDeformConv2d(nn.Module):
                              groups=groups,
                              deformable_groups=deformable_groups)
 
-            conv_i.weight = self.weight
+            if i == 0:
+                self.register_parameter('weight', conv_i.weight)
+            else:
+                conv_i.weight = self.weight
             self.shared_conv.append(conv_i)
             self.offset_conv.append(offset_conv_i)
         self.init_weights()

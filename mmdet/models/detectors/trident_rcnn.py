@@ -39,7 +39,8 @@ class TridentRCNN(TwoStageDetector):
                  neck=None,
                  shared_head=None,
                  pretrained=None,
-                 val_range=((0, 90), (30, 160), (90, -1)),
+                 scale_aware=True,
+                 valid_range=((0, 90), (30, 160), (90, -1)),
                  **kwargs):
         super(TridentRCNN, self).__init__(
             backbone=backbone,
@@ -51,7 +52,8 @@ class TridentRCNN(TwoStageDetector):
             train_cfg=train_cfg,
             test_cfg=test_cfg,
             pretrained=pretrained)
-        self.val_range = val_range
+        self.scale_aware = scale_aware
+        self.valid_range = valid_range
 
     def forward_train(self,
                       img,
@@ -84,7 +86,7 @@ class TridentRCNN(TwoStageDetector):
         val_index = torch.zeros(x[0].shape[0])
         val_pointer = -1
         for img_num in range(img.size(0)):
-            for lo, hi in self.val_range:
+            for lo, hi in self.valid_range:
                 val_pointer += 1
                 bboxes_hw = gt_bboxes[img_num][:, 2:] - gt_bboxes[img_num][:, :2]
                 boxes_area = (bboxes_hw[:, 0] * bboxes_hw[:, 1]).clamp(min=0)
@@ -93,32 +95,35 @@ class TridentRCNN(TwoStageDetector):
                 else:
                     boxes_index = boxes_area > lo ** 2
                 if boxes_index.int().sum():
-                    val_index[val_pointer] = 1
-                    arg_idx = torch.nonzero(boxes_index).squeeze()
-                    img_meta_.append(img_meta[img_num])
-                    gt_bboxes_.append(gt_bboxes[img_num][arg_idx])  # [3n, [gts_v, 4]]
-                    gt_labels_.append(gt_labels[img_num][arg_idx])  # [3n, [gts_v]]
-                    # gt_masks_.append(gt_masks[img_num][arg_idx.cpu()])
-                    gt_bboxes_ignore_.append(gt_bboxes_ignore[img_num])
-                    if arg_idx.numel() == 1:
-                        gt_bboxes_[-1].unsqueeze_(dim=0)
-                        gt_labels_[-1].unsqueeze_(dim=0)
-                        # gt_masks_[-1] = gt_masks_[-1][None]
-                # img_meta_.append(img_meta[img_num])
-                # gt_bboxes_.append(gt_bboxes[img_num])  # [3n, [gts_v, 4]]
-                # gt_labels_.append(gt_labels[img_num])  # [3n, [gts_v]]
-                # # gt_masks_.append(gt_masks[img_num][arg_idx.cpu()])
-                # gt_bboxes_ignore_.append(gt_bboxes_ignore[img_num])
+                    if self.scale_aware:
+                        val_index[val_pointer] = 1
+                        arg_idx = torch.nonzero(boxes_index).squeeze()
+                        img_meta_.append(img_meta[img_num])
+                        gt_bboxes_.append(gt_bboxes[img_num][arg_idx])  # [3n, [gts_v, 4]]
+                        gt_labels_.append(gt_labels[img_num][arg_idx])  # [3n, [gts_v]]
+                        # gt_masks_.append(gt_masks[img_num][arg_idx.cpu()])
+                        gt_bboxes_ignore_.append(gt_bboxes_ignore[img_num])
+                        if arg_idx.numel() == 1:
+                            gt_bboxes_[-1].unsqueeze_(dim=0)
+                            gt_labels_[-1].unsqueeze_(dim=0)
+                            # gt_masks_[-1] = gt_masks_[-1][None]
+                    else:
+                        img_meta_.append(img_meta[img_num])
+                        gt_bboxes_.append(gt_bboxes[img_num])  # [3n, [gts_v, 4]]
+                        gt_labels_.append(gt_labels[img_num])  # [3n, [gts_v]]
+                        # gt_masks_.append(gt_masks[img_num][arg_idx.cpu()])
+                        gt_bboxes_ignore_.append(gt_bboxes_ignore[img_num])
 
         img_meta = img_meta_
         gt_bboxes = gt_bboxes_
         gt_labels = gt_labels_
         gt_bboxes_ignore = gt_bboxes_ignore_
 
-        idx = torch.nonzero(val_index).squeeze()
-        x = x[0][idx][None]
-        if idx.numel() == 1:
-            x = [x,]
+        if self.scale_aware:
+            idx = torch.nonzero(val_index).squeeze()
+            x = x[0][idx][None]
+            if idx.numel() == 1:
+                x = [x,]
 
         losses = dict()
 

@@ -9,7 +9,7 @@ from mmdet.apis import init_detector, inference_detector, show_result
 
 
 
-config_file = 'configs/trident_rcnn_r50_fpn_1x.py'
+config_file = 'configs/trident_rcnn_r50_fpn_1x_dcnv2.py'
 checkpoint_file = 'work_dirs/faster_rcnn_r50_fpn_1x/latest.pth'
 
 model = init_detector(config_file, checkpoint_file, device='cuda:0')

@@ -39,7 +39,7 @@ class TridentRCNN(TwoStageDetector):
                  neck=None,
                  shared_head=None,
                  pretrained=None,
-                 val_range=((0, 90), (60, 160), (90, -1)),
+                 val_range=((0, 90), (30, 160), (90, -1)),
                  **kwargs):
         super(TridentRCNN, self).__init__(
             backbone=backbone,
@@ -52,12 +52,6 @@ class TridentRCNN(TwoStageDetector):
             test_cfg=test_cfg,
             pretrained=pretrained)
         self.val_range = val_range
-        # self.g = gradient
-        # self.g1 = gradient1
-        # # self.rpn_head.register_forward_hook(forward_hook)
-        # # self.backbone.register_backward_hook(backward_hook)
-        # self.neck.register_backward_hook(backward_hook)
-        # self.gradient = gradient
 
     def forward_train(self,
                       img,
@@ -69,6 +63,12 @@ class TridentRCNN(TwoStageDetector):
                       proposals=None):
         x = self.extract_feat(img)
         self.x = x
+
+        # c4_shape = list(x[0].shape)
+        # c4_shape[0] *= 3
+        # x = torch.stack([x[0]] * 3, dim=1)
+        # x = [x.view(c4_shape)]
+
         if not self.backbone.shared:
             # x[0].register_hook(hook)
             c4_shape = list(x[0].shape)

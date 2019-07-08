@@ -9,34 +9,12 @@ from mmcv.cnn import constant_init, kaiming_init
 from mmcv.runner import load_checkpoint
 
 from mmdet.ops import DeformConv, ModulatedDeformConv, ContextBlock
-# from mmdet.ops import SharedBatchNorm, SharedConv2d
-from mmdet.ops import PyramidBatchNorm as SharedBatchNorm
-from mmdet.ops import PyramidConv2d as SharedConv2d
+from mmdet.ops import SharedBatchNorm, SharedConv2d, SharedDeformConv2d
 from mmdet.models.plugins import GeneralizedAttention
 
 from ..registry import BACKBONES
 from ..utils import build_conv_layer, build_norm_layer
-# SharedConv, SharedDeformConv, SharedBN
 
-# gradient = []
-# def backward_hook(module, grad_input, grad_output):
-#     print(module)
-#     print(len(grad_output))
-#     for g in grad_output:
-#         print('out: ', g.shape)
-#         print(g.sum())
-#     for g in grad_input:
-#         if g is not None:
-#             print('in: ', g.shape)
-#             print(g.sum())
-#     print("-"*100)
-#
-# def hook(grad):
-#     print("*"*100)
-#     print(grad.shape)
-#     print([g.sum() for g in grad])
-#     gradient.append(grad)
-#     print("*" * 100)
 
 class SharedBottleneck(nn.Module):
 
@@ -49,7 +27,7 @@ class SharedBottleneck(nn.Module):
                  dilate=(1, 2, 3),
                  downsample=None,
                  with_cp=False,
-                 norm_cfg=dict(type='BN'),
+                 norm_cfg=dict(type='SyncBN'),
                  dcn=None):
         super(SharedBottleneck, self).__init__()
         assert dcn is None or isinstance(dcn, dict)
@@ -62,15 +40,35 @@ class SharedBottleneck(nn.Module):
 
         self.conv1 = SharedConv2d(in_channels=inplanes, out_channels=planes,
                                   kernel_size=1, stride=1, dilation=(1, 1, 1), bias=False)
-        self.norm1 = SharedBatchNorm(num_features=planes)
+        self.norm1 = SharedBatchNorm(num_features=planes, normalizer=normalizer)
 
-        self.conv2 = SharedConv2d(in_channels=planes, out_channels=planes,
-                                  kernel_size=3, stride=stride, dilation=dilate, padding=dilate, bias=False)
-        self.norm2 = SharedBatchNorm(num_features=planes)
+        fallback_on_stride = False
+        self.with_modulated_dcn = False
+        if self.with_dcn:
+            fallback_on_stride = self.dcn.get('fallback_on_stride', False)
+            self.with_modulated_dcn = self.dcn.get('modulated', False)
+        if not self.with_dcn or fallback_on_stride:
+            self.conv2 = SharedConv2d(in_channels=planes, out_channels=planes,
+                                      kernel_size=3, stride=stride, dilation=dilate, padding=dilate, bias=False)
+        else:
+            assert self.conv_cfg is None, 'conv_cfg must be None for DCN'
+            groups = self.dcn.get('groups', 1)
+            deformable_groups = self.dcn.get('deformable_groups', 1)
+            if not self.with_modulated_dcn:
+                conv_op = DeformConv
+            else:
+                conv_op = ModulatedDeformConv
+            self.conv2 = SharedDeformConv2d(in_channels=planes, out_channels=planes,
+                                            kernel_size=3, conv_op=conv_op,
+                                            stride=stride, dilation=dilate, padding=dilate,
+                                            groups=groups, deformable_groups=deformable_groups)
+
+        self.norm2 = SharedBatchNorm(num_features=planes, normalizer=normalizer)
 
         self.conv3 = SharedConv2d(in_channels=planes, out_channels=planes*self.expansion,
                                   kernel_size=1, stride=1, dilation=(1, 1, 1), bias=False)
-        self.norm3 = SharedBatchNorm(num_features=planes*self.expansion)
+        self.norm3 = SharedBatchNorm(num_features=planes*self.expansion, normalizer=normalizer)
+
         self.downsample = downsample
 
     def forward(self, x):
@@ -368,7 +366,7 @@ class TridResLayer(nn.Module):
                  dcn=None,
                  shared=True):
         super(TridResLayer, self).__init__()
-        self.shared=shared
+        self.shared = shared
         downsample = None
         if stride != 1 or inplanes != planes * block.expansion:
             downsample = build_conv_layer(None,
@@ -389,12 +387,13 @@ class TridResLayer(nn.Module):
         inplanes = planes * block.expansion
         for i in range(1, blocks):
             layers_.append(
-                block(inplanes,
-                      planes,
-                      stride=(1, 1, 1),
-                      dilate=dilation,
-                      norm_cfg=norm_cfg,
-                      dcn=dcn))
+                SharedBottleneck(
+                    inplanes,
+                    planes,
+                    stride=(1, 1, 1),
+                    dilate=dilation,
+                    norm_cfg=norm_cfg,
+                    dcn=dcn))
         self.layers = nn.Sequential(*layers_)
 
     def forward(self, x):
@@ -506,12 +505,15 @@ class SharedResNet(nn.Module):
             gcb = self.gcb if self.stage_with_gcb[i] else None
             planes = 64 * 2**i
             if i == self.shared_layer:
-                res_layer = TridResLayer(SharedBottleneck,
-                                         self.inplanes,
-                                         planes,
-                                         num_blocks,
-                                         norm_cfg=norm_cfg,
-                                         shared=self.shared)
+                res_layer = TridResLayer(
+                    self.block,
+                    self.inplanes,
+                    planes,
+                    num_blocks,
+                    stride=stride,
+                    norm_cfg=norm_cfg,
+                    dcn=dcn,
+                    shared=shared)
             else:
                 res_layer = make_res_layer(
                     self.block,

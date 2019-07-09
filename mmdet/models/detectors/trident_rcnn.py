@@ -55,6 +55,12 @@ class TridentRCNN(TwoStageDetector):
         self.scale_aware = scale_aware
         self.valid_range = valid_range
 
+    def extract_feat(self, img):
+        x = self.backbone(img)
+        if self.with_neck:
+            x = self.neck(x)
+        return x
+
     def forward_train(self,
                       img,
                       img_meta,
@@ -64,7 +70,6 @@ class TridentRCNN(TwoStageDetector):
                       gt_masks=None,
                       proposals=None):
         x = self.extract_feat(img)
-        self.x = x
 
         # c4_shape = list(x[0].shape)
         # c4_shape[0] *= 3
@@ -75,7 +80,7 @@ class TridentRCNN(TwoStageDetector):
             # x[0].register_hook(hook)
             c4_shape = list(x[0].shape)
             c4_shape[0] *= 3
-            x = torch.stack([x[0]]*3, dim=1)
+            x = torch.stack([x[0]] * 3, dim=1)
             x = [x.view(c4_shape)]
 
         img_meta_ = list()
@@ -119,17 +124,24 @@ class TridentRCNN(TwoStageDetector):
         gt_labels = gt_labels_
         gt_bboxes_ignore = gt_bboxes_ignore_
 
+        if len(x) != 1:
+            rpn_ids, rcnn_ids = 0, 1
+        else:
+            rpn_ids = rcnn_ids = 0
         if self.scale_aware:
             idx = torch.nonzero(val_index).squeeze()
-            x = x[0][idx][None]
-            if idx.numel() == 1:
-                x = [x,]
-
+            rpn_feat = [x[rpn_ids][idx][None]] if idx.numel() == 1 else [x[rpn_ids][idx]]
+            rcnn_feat = [x[rcnn_ids][idx][None]] if idx.numel() == 1 else [x[rcnn_ids][idx]]
+        else:
+            rpn_feat = [x[rpn_ids]]
+            rcnn_feat = [x[rcnn_ids]]
+        # rpn_feat = [x[0]]
+        # rcnn_feat = [x[0]]
         losses = dict()
 
         # RPN forward and loss
         if self.with_rpn:
-            rpn_outs = self.rpn_head(x)
+            rpn_outs = self.rpn_head(rpn_feat)
             rpn_loss_inputs = rpn_outs + (gt_bboxes, img_meta,
                                           self.train_cfg.rpn)
             rpn_losses = self.rpn_head.loss(
@@ -161,7 +173,7 @@ class TridentRCNN(TwoStageDetector):
                     proposal_list[i],
                     gt_bboxes[i],
                     gt_labels[i],
-                    feats=[lvl_feat[i][None] for lvl_feat in x])
+                    feats=[lvl_feat[i][None] for lvl_feat in rcnn_feat])
                 sampling_results.append(sampling_result)
 
         # bbox head forward and loss
@@ -172,7 +184,7 @@ class TridentRCNN(TwoStageDetector):
 
             # self.bbox_roi_extractor.register_backward_hook(backward_hook)
             bbox_feats = self.bbox_roi_extractor(
-                x[:self.bbox_roi_extractor.num_inputs], rois)
+                rcnn_feat[:self.bbox_roi_extractor.num_inputs], rois)
             # bbox_feats.register_hook(hook)
             if self.with_shared_head:
                 bbox_feats = self.shared_head(bbox_feats)
@@ -197,7 +209,7 @@ class TridentRCNN(TwoStageDetector):
                 pos_rois = bbox2roi(
                     [res.pos_bboxes for res in sampling_results])
                 mask_feats = self.mask_roi_extractor(
-                    x[:self.mask_roi_extractor.num_inputs], pos_rois)
+                    rcnn_feat[:self.mask_roi_extractor.num_inputs], pos_rois)
                 if self.with_shared_head:
                     mask_feats = self.shared_head(mask_feats)
             else:
@@ -228,23 +240,28 @@ class TridentRCNN(TwoStageDetector):
 
         return losses
 
-    # def simple_test(self, img, img_meta, proposals=None, rescale=False):
-    #     """Test without augmentation."""
-    #     assert self.with_bbox, "Bbox head must be implemented."
-    #
-    #     x = self.extract_feat(img)
-    #
-    #     proposal_list = self.simple_test_rpn(
-    #         x, img_meta, self.test_cfg.rpn) if proposals is None else proposals
-    #
-    #     det_bboxes, det_labels = self.simple_test_bboxes(
-    #         x, img_meta, proposal_list, self.test_cfg.rcnn, rescale=rescale)
-    #     bbox_results = bbox2result(det_bboxes, det_labels,
-    #                                self.bbox_head.num_classes)
-    #
-    #     if not self.with_mask:
-    #         return bbox_results
-    #     else:
-    #         segm_results = self.simple_test_mask(
-    #             x, img_meta, det_bboxes, det_labels, rescale=rescale)
-    #         return bbox_results, segm_results
+    def simple_test(self, img, img_meta, proposals=None, rescale=False):
+        """Test without augmentation."""
+        assert self.with_bbox, "Bbox head must be implemented."
+
+        x = self.extract_feat(img)
+        if len(x) != 1:
+            rpn_ids, rcnn_ids = 0, 1
+        else:
+            rpn_ids = rcnn_ids = 0
+        rpn_feat, rcnn_feat = [x[rpn_ids]], [x[rcnn_ids]]
+
+        proposal_list = self.simple_test_rpn(
+            rpn_feat, img_meta, self.test_cfg.rpn) if proposals is None else proposals
+
+        det_bboxes, det_labels = self.simple_test_bboxes(
+            rcnn_feat, img_meta, proposal_list, self.test_cfg.rcnn, rescale=rescale)
+        bbox_results = bbox2result(det_bboxes, det_labels,
+                                   self.bbox_head.num_classes)
+
+        if not self.with_mask:
+            return bbox_results
+        else:
+            segm_results = self.simple_test_mask(
+                rcnn_feat, img_meta, det_bboxes, det_labels, rescale=rescale)
+            return bbox_results, segm_results

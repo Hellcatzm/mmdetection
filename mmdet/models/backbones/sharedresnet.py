@@ -311,12 +311,16 @@ def make_res_layer(block,
                    gen_attention_blocks=[]):
     downsample = None
     if stride != 1 or inplanes != planes * block.expansion:
-        downsample = build_conv_layer(conv_cfg,
-                                      inplanes,
-                                      planes * block.expansion,
-                                      kernel_size=1,
-                                      stride=stride,
-                                      bias=False)
+        downsample = nn.Sequential(
+            build_conv_layer(
+                None,
+                inplanes,
+                planes * block.expansion,
+                kernel_size=1,
+                stride=stride,
+                bias=False),
+            build_norm_layer(norm_cfg, planes * block.expansion)[1],
+        )
 
     layers = []
     layers.append(
@@ -369,12 +373,23 @@ class TridResLayer(nn.Module):
         self.shared = shared
         downsample = None
         if stride != 1 or inplanes != planes * block.expansion:
-            downsample = build_conv_layer(None,
-                                          inplanes,
-                                          planes * block.expansion,
-                                          kernel_size=1,
-                                          stride=stride,
-                                          bias=False)
+            downsample = nn.Sequential(
+                build_conv_layer(
+                    None,
+                    inplanes,
+                    planes * block.expansion,
+                    kernel_size=1,
+                    stride=stride,
+                    bias=False),
+                build_norm_layer(norm_cfg, planes * block.expansion)[1],
+            )
+            # downsample = build_conv_layer(None,
+            #                               inplanes,
+            #                               planes * block.expansion,
+            #                               kernel_size=1,
+            #                               stride=stride,
+            #                               bias=False)
+
 
         self.layer0 = Bottleneck(inplanes,
                                  planes,

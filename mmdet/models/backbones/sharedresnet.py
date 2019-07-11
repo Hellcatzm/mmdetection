@@ -368,9 +368,11 @@ class TridResLayer(nn.Module):
                  dilation=(1, 2, 3),
                  norm_cfg=dict(type='BN'),
                  dcn=None,
-                 shared=True):
+                 shared=True,
+                 shared_test=False):
         super(TridResLayer, self).__init__()
         self.shared = shared
+        self.shared_test = shared_test
         downsample = None
         if stride != 1 or inplanes != planes * block.expansion:
             downsample = nn.Sequential(
@@ -413,7 +415,7 @@ class TridResLayer(nn.Module):
 
     def forward(self, x):
         x = self.layer0(x)
-        if self.shared and self.training:
+        if self.shared and (self.training or self.shared_test):
             x = [x]*3
             x = self.layers(x)
             f_shape = list(x[0].shape)
@@ -475,8 +477,10 @@ class SharedResNet(nn.Module):
                  stage_with_gen_attention=((), (), (), ()),
                  with_cp=False,
                  zero_init_residual=True,
-                 shared=True,
-                 shared_layer=2):
+                 shared=True,        # TridResLayer是否启用branch结构
+                 shared_layer=2,     # TridResLayer位置
+                 shared_test=False,  # test是否启用branch结构
+                 ):
         super(SharedResNet, self).__init__()
         if depth not in self.arch_settings:
             raise KeyError('invalid depth {} for resnet'.format(depth))
@@ -509,6 +513,7 @@ class SharedResNet(nn.Module):
         self.inplanes = 64
         self.shared = shared
         self.shared_layer = shared_layer
+        self.shared_test = shared_test
 
         self._make_stem_layer()
 
@@ -528,7 +533,8 @@ class SharedResNet(nn.Module):
                     stride=stride,
                     norm_cfg=norm_cfg,
                     dcn=dcn,
-                    shared=shared)
+                    shared=shared,
+                    shared_test=shared_test)
             else:
                 res_layer = make_res_layer(
                     self.block,

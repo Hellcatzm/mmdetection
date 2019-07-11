@@ -24,9 +24,9 @@ def backward_hook(module, grad_input, grad_output):
     print(grad_output.data.shape)
 
 
-HOOT_MODE = "train"  # "inference" or "train"
+HOOT_MODE = "inference"  # "inference" or "train"
 ROOT_DIR = '/home/gttintern/mmdetection'
-CONFIG_NAME = 'configs/carbonate/trident/trident_rcnn_r50_fpn_1x.py'
+CONFIG_NAME = 'configs/carbonate/trident/trident_c4c5_r50_fpn_1x.py'
 
 config_file = os.path.join(ROOT_DIR, CONFIG_NAME)
 cfg = mmcv.Config.fromfile(config_file)
@@ -66,7 +66,7 @@ if HOOT_MODE == "inference":
                        img=[batch_data['img'].data[0].cuda()],
                        img_meta=[batch_data['img_meta'].data[0]],
                        )
-    plt.imshow(batch_data['img'].data[0][0][1])
+    # plt.imshow(batch_data['img'].data[0][0][1])
     # for i in range(10):
     #     plt.plot(result[0][0][i][[0,2]],result[0][0][i][[1,3]])
 elif HOOT_MODE == "train":

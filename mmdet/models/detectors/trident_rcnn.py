@@ -4,6 +4,7 @@ import torch
 from .two_stage import TwoStageDetector
 from ..registry import DETECTORS
 from mmdet.core import bbox2roi, bbox2result, build_assigner, build_sampler
+from mmdet.ops import nms
 
 # gradient = []
 # gradient1 = []
@@ -25,6 +26,7 @@ from mmdet.core import bbox2roi, bbox2result, build_assigner, build_sampler
 #             print('in: ', g.shape)
 #             print(g.sum())
 #     print("*" * 100)
+
 
 @DETECTORS.register_module
 class TridentRCNN(TwoStageDetector):
@@ -78,10 +80,15 @@ class TridentRCNN(TwoStageDetector):
 
         if not self.backbone.shared:
             # x[0].register_hook(hook)
-            c4_shape = list(x[0].shape)
-            c4_shape[0] *= 3
-            x = torch.stack([x[0]] * 3, dim=1)
-            x = [x.view(c4_shape)]
+            c41_shape = list(x[0].shape)
+            c41_shape[0] *= 3
+            rpnf = torch.stack([x[0]] * 3, dim=1)
+            rpnf = rpnf.view(c41_shape)
+            c42_shape = list(x[1].shape)
+            c42_shape[0] *= 3
+            rcnnf = torch.stack([x[1]] * 3, dim=1)
+            rcnnf = rcnnf.view(c42_shape)
+            x = [rpnf, rcnnf]
 
         img_meta_ = list()
         gt_bboxes_ = list()
@@ -166,7 +173,9 @@ class TridentRCNN(TwoStageDetector):
             sampling_results = []
             for i in range(num_imgs):
                 assign_result = bbox_assigner.assign(
-                    proposal_list[i], gt_bboxes[i], gt_bboxes_ignore[i],
+                    proposal_list[i],
+                    gt_bboxes[i],
+                    gt_bboxes_ignore[i],
                     gt_labels[i])
                 sampling_result = bbox_sampler.sample(
                     assign_result,
@@ -251,11 +260,27 @@ class TridentRCNN(TwoStageDetector):
             rpn_ids = rcnn_ids = 0
         rpn_feat, rcnn_feat = [x[rpn_ids]], [x[rcnn_ids]]
 
+        if self.backbone.shared_test:
+            img_meta_ = list()
+            for img_num in range(img.size(0)):
+                for _ in self.valid_range:
+                    img_meta_.append(img_meta[img_num])
+            img_meta = img_meta_
+
+        # [imgs(branches), [anchors, 5]]
         proposal_list = self.simple_test_rpn(
             rpn_feat, img_meta, self.test_cfg.rpn) if proposals is None else proposals
 
+        if self.backbone.shared_test:
+            proposal_ = proposal_list[0]
+            for p in proposal_list[1:]:
+                proposal_ = torch.cat([proposal_, p])
+            proposal_list = [nms(proposal_, 0.7)[0]]
+
         det_bboxes, det_labels = self.simple_test_bboxes(
             rcnn_feat, img_meta, proposal_list, self.test_cfg.rcnn, rescale=rescale)
+
+        # [num_cls, 5]
         bbox_results = bbox2result(det_bboxes, det_labels,
                                    self.bbox_head.num_classes)
 

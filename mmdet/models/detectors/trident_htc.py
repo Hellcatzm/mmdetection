@@ -6,19 +6,24 @@ from ..registry import DETECTORS
 from .htc import HybridTaskCascade
 from mmdet.core import (bbox2roi, bbox2result, build_assigner, build_sampler,
                         merge_aug_masks)
-from functools import reduce
+from mmdet.ops import nms
 
 
 @DETECTORS.register_module
 class TridentHTC(HybridTaskCascade):
 
-    def __init__(self, val_range=((0, 10), (5, 15), (15, -1)), **kwargs):
+    def __init__(self,
+                 scale_aware=True,
+                 valid_range=((0, 90), (30, 160), (90, -1)), **kwargs):
         super(TridentHTC, self).__init__(**kwargs)
-        self.val_range = val_range
+        self.scale_aware = scale_aware
+        self.valid_range = valid_range
 
     def extract_feat(self, img):
         x = self.backbone(img)
-        return self.neck(*x)
+        if self.with_neck:
+            x = self.neck(x)
+        return x
 
     def forward_train(self,
                       img,
@@ -29,21 +34,34 @@ class TridentHTC(HybridTaskCascade):
                       gt_masks=None,  # [n, np.array[gts, h, w]]
                       gt_semantic_seg=None,
                       proposals=None):
-        rpn_feat, rcnn_feat = self.extract_feat(img)  # [3n, 256, h, w]
-        self.sr = []
-        # convert data from dim imgs to dim branches*imgs
-        if not isinstance(gt_bboxes_ignore, (list, tuple)):
-            gt_bboxes_ignore = [None]
+        x = self.extract_feat(img)
+
+        # c4_shape = list(x[0].shape)
+        # c4_shape[0] *= 3
+        # x = torch.stack([x[0]] * 3, dim=1)
+        # x = [x.view(c4_shape)]
+
+        if not self.backbone.shared:
+            # x[0].register_hook(hook)
+            c41_shape = list(x[0].shape)
+            c41_shape[0] *= 3
+            rpnf = torch.stack([x[0]] * 3, dim=1)
+            rpnf = rpnf.view(c41_shape)
+            c42_shape = list(x[1].shape)
+            c42_shape[0] *= 3
+            rcnnf = torch.stack([x[1]] * 3, dim=1)
+            rcnnf = rcnnf.view(c42_shape)
+            x = [rpnf, rcnnf]
 
         img_meta_ = list()
         gt_bboxes_ = list()
         gt_labels_ = list()
         gt_masks_ = list()
         gt_bboxes_ignore_ = list()
-        val_index = torch.zeros(rpn_feat.shape[0])
+        val_index = torch.zeros(x[0].shape[0])
         val_pointer = -1
         for img_num in range(img.size(0)):
-            for lo, hi in self.val_range:
+            for lo, hi in self.valid_range:
                 val_pointer += 1
                 bboxes_hw = gt_bboxes[img_num][:, 2:] - gt_bboxes[img_num][:, :2]
                 boxes_area = (bboxes_hw[:, 0] * bboxes_hw[:, 1]).clamp(min=0)
@@ -52,23 +70,42 @@ class TridentHTC(HybridTaskCascade):
                 else:
                     boxes_index = boxes_area > lo ** 2
                 if boxes_index.int().sum():
-                    val_index[val_pointer] = 1
-                    arg_idx = torch.nonzero(boxes_index).squeeze()
-                    img_meta_.append(img_meta[img_num])
-                    gt_bboxes_.append(gt_bboxes[img_num][arg_idx])  # [3n, [gts_v, 4]]
-                    gt_labels_.append(gt_labels[img_num][arg_idx])  # [3n, [gts_v]]
-                    gt_masks_.append(gt_masks[img_num][arg_idx.cpu()])
-                    gt_bboxes_ignore_.append(gt_bboxes_ignore[img_num])
-                    if arg_idx.numel() == 1:
-                        gt_bboxes_[-1].unsqueeze_(dim=0)
-                        gt_labels_[-1].unsqueeze_(dim=0)
-                        gt_masks_[-1] = gt_masks_[-1][None]
-        idx = torch.nonzero(val_index).squeeze()
-        rpn_feat = rpn_feat[idx][None]
-        rcnn_feat = rcnn_feat[idx][None]
-        if idx.numel() == 1:
-            rpn_feat = rpn_feat[None]
-            rcnn_feat = rcnn_feat[None]
+                    if self.scale_aware:
+                        val_index[val_pointer] = 1
+                        arg_idx = torch.nonzero(boxes_index).squeeze()
+                        img_meta_.append(img_meta[img_num])
+                        gt_bboxes_.append(gt_bboxes[img_num][arg_idx])  # [3n, [gts_v, 4]]
+                        gt_labels_.append(gt_labels[img_num][arg_idx])  # [3n, [gts_v]]
+                        gt_masks_.append(gt_masks[img_num][arg_idx.cpu()])
+                        gt_bboxes_ignore_.append(gt_bboxes_ignore[img_num])
+                        if arg_idx.numel() == 1:
+                            gt_bboxes_[-1].unsqueeze_(dim=0)
+                            gt_labels_[-1].unsqueeze_(dim=0)
+                            gt_masks_[-1] = gt_masks_[-1][None]
+                    else:
+                        img_meta_.append(img_meta[img_num])
+                        gt_bboxes_.append(gt_bboxes[img_num])  # [3n, [gts_v, 4]]
+                        gt_labels_.append(gt_labels[img_num])  # [3n, [gts_v]]
+                        gt_masks_.append(gt_masks[img_num][arg_idx.cpu()])
+                        gt_bboxes_ignore_.append(gt_bboxes_ignore[img_num])
+
+        img_meta = img_meta_
+        gt_bboxes = gt_bboxes_
+        gt_labels = gt_labels_
+        gt_masks = gt_masks_
+        gt_bboxes_ignore = gt_bboxes_ignore_
+
+        if len(x) != 1:
+            rpn_ids, rcnn_ids = 0, 1
+        else:
+            rpn_ids = rcnn_ids = 0
+        if self.scale_aware:
+            idx = torch.nonzero(val_index).squeeze()
+            rpn_feat = [x[rpn_ids][idx][None]] if idx.numel() == 1 else [x[rpn_ids][idx]]
+            rcnn_feat = [x[rcnn_ids][idx][None]] if idx.numel() == 1 else [x[rcnn_ids][idx]]
+        else:
+            rpn_feat = [x[rpn_ids]]
+            rcnn_feat = [x[rcnn_ids]]
 
         # forward as normal
         losses = dict()
@@ -80,22 +117,22 @@ class TridentHTC(HybridTaskCascade):
         # [list: num_levels, [3n, anchors*2, h, w]]
         # [list: num_levels, [3n, anchors*4, h, w]]
 
-        rpn_loss_inputs = rpn_outs + (gt_bboxes_, img_meta_, self.train_cfg.rpn)
+        rpn_loss_inputs = rpn_outs + (gt_bboxes, img_meta, self.train_cfg.rpn)
         self.rpn = rpn_loss_inputs
         rpn_losses = self.rpn_head.loss(
-            *rpn_loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore_)
+            *rpn_loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
 
         losses.update(rpn_losses)
 
         proposal_cfg = self.train_cfg.get('rpn_proposal',
                                           self.test_cfg.rpn)
-        proposal_inputs = rpn_outs + (img_meta_, proposal_cfg)
+        proposal_inputs = rpn_outs + (img_meta, proposal_cfg)
         proposal_list = self.rpn_head.get_bboxes(*proposal_inputs)  # [list(num imgs) [2000(配置文件指定), 5]]
 
         assert not self.with_semantic, "Not supply yet"
         semantic_feat = None
 
-        num_imgs = len(img_meta_)
+        num_imgs = len(img_meta)
         for i in range(self.num_stages):
             self.current_stage = i
             rcnn_train_cfg = self.train_cfg.rcnn[i]
@@ -109,21 +146,21 @@ class TridentHTC(HybridTaskCascade):
             for j in range(num_imgs):
                 assign_result = bbox_assigner.assign(
                     proposal_list[j],
-                    gt_bboxes_[j],
-                    gt_bboxes_ignore_[j],
-                    gt_labels_[j])
+                    gt_bboxes[j],
+                    gt_bboxes_ignore[j],
+                    gt_labels[j])
                 sampling_result = bbox_sampler.sample(
                     assign_result,
                     proposal_list[j],
-                    gt_bboxes_[j],
-                    gt_labels_[j],
+                    gt_bboxes[j],
+                    gt_labels[j],
                     feats=rcnn_feat)
                 sampling_results.append(sampling_result)
 
             # bbox head forward and loss
             loss_bbox, rois, bbox_targets, bbox_pred = \
                 self._bbox_forward_train(
-                    i, rcnn_feat, sampling_results, gt_bboxes_, gt_labels_,
+                    i, rcnn_feat, sampling_results, gt_bboxes, gt_labels,
                     rcnn_train_cfg, semantic_feat)
             roi_labels = bbox_targets[0]
 
@@ -139,25 +176,25 @@ class TridentHTC(HybridTaskCascade):
                     pos_is_gts = [res.pos_is_gt for res in sampling_results]
                     with torch.no_grad():
                         proposal_list = self.bbox_head[i].refine_bboxes(
-                            rois, roi_labels, bbox_pred, pos_is_gts, img_meta_)
+                            rois, roi_labels, bbox_pred, pos_is_gts, img_meta)
                         # re-assign and sample 512 RoIs from 512 RoIs
                         sampling_results = []
                         for j in range(num_imgs):
                             assign_result = bbox_assigner.assign(
                                 proposal_list[j],
-                                gt_bboxes_[j],
-                                gt_bboxes_ignore_[j],
-                                gt_labels_[j])
+                                gt_bboxes[j],
+                                gt_bboxes_ignore[j],
+                                gt_labels[j])
                             sampling_result = bbox_sampler.sample(
                                 assign_result,
                                 proposal_list[j],
-                                gt_bboxes_[j],
-                                gt_labels_[j],
+                                gt_bboxes[j],
+                                gt_labels[j],
                                 feats=rcnn_feat)
                             sampling_results.append(sampling_result)
-                self.sr.append(sampling_results)
+
                 loss_mask = self._mask_forward_train(i, rcnn_feat, sampling_results,
-                                                     gt_masks_, rcnn_train_cfg,
+                                                     gt_masks, rcnn_train_cfg,
                                                      semantic_feat)
                 for name, value in loss_mask.items():
                     losses['s{}.{}'.format(i, name)] = (
@@ -168,14 +205,33 @@ class TridentHTC(HybridTaskCascade):
                 pos_is_gts = [res.pos_is_gt for res in sampling_results]
                 with torch.no_grad():
                     proposal_list = self.bbox_head[i].refine_bboxes(
-                        rois, roi_labels, bbox_pred, pos_is_gts, img_meta_)
+                        rois, roi_labels, bbox_pred, pos_is_gts, img_meta)
 
         return losses
 
     def simple_test(self, img, img_meta, proposals=None, rescale=False):
-        rpn_feat, rcnn_feat = self.extract_feat(img)  # [n, 256, h, w], [n, 256, h, w]
+        x = self.extract_feat(img)
+        if len(x) != 1:
+            rpn_ids, rcnn_ids = 0, 1
+        else:
+            rpn_ids = rcnn_ids = 0
+        rpn_feat, rcnn_feat = [x[rpn_ids]], [x[rcnn_ids]]
+
+        if self.backbone.shared_test:
+            img_meta_ = list()
+            for img_num in range(img.size(0)):
+                for _ in self.valid_range:
+                    img_meta_.append(img_meta[img_num])
+            img_meta = img_meta_
+
         proposal_list = self.simple_test_rpn(
-            rpn_feat[None], img_meta, self.test_cfg.rpn) if proposals is None else proposals
+            rpn_feat, img_meta, self.test_cfg.rpn) if proposals is None else proposals
+
+        if self.backbone.shared_test:
+            proposal_ = proposal_list[0]
+            for p in proposal_list[1:]:
+                proposal_ = torch.cat([proposal_, p])
+            proposal_list = [nms(proposal_, 0.7)[0]]
 
         assert not self.with_semantic, "Not supply yet"
         semantic_feat = None
@@ -194,7 +250,7 @@ class TridentHTC(HybridTaskCascade):
         for i in range(self.num_stages):
             bbox_head = self.bbox_head[i]
             cls_score, bbox_pred = self._bbox_forward_test(
-                i, rcnn_feat[None], rois, semantic_feat=semantic_feat)
+                i, rcnn_feat, rois, semantic_feat=semantic_feat)
             ms_scores.append(cls_score)
 
             if self.test_cfg.keep_all_stages:
@@ -221,7 +277,7 @@ class TridentHTC(HybridTaskCascade):
                             det_bboxes[:, :4] * scale_factor
                             if rescale else det_bboxes)
                         mask_pred = self._mask_forward_test(
-                            i, rcnn_feat[None], _bboxes, semantic_feat=semantic_feat)
+                            i, rcnn_feat, _bboxes, semantic_feat=semantic_feat)
                         segm_result = mask_head.get_seg_masks(
                             mask_pred, _bboxes, det_labels, rcnn_test_cfg,
                             ori_shape, scale_factor, rescale)
@@ -259,7 +315,7 @@ class TridentHTC(HybridTaskCascade):
                 aug_masks = []
                 mask_roi_extractor = self.mask_roi_extractor[-1]
                 mask_feats = mask_roi_extractor(
-                    rcnn_feat[None][:len(mask_roi_extractor.featmap_strides)], mask_rois)
+                    rcnn_feat[:len(mask_roi_extractor.featmap_strides)], mask_rois)
                 if self.with_semantic and 'mask' in self.semantic_fusion:
                     mask_semantic_feat = self.semantic_roi_extractor(
                         [semantic_feat], mask_rois)

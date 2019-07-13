@@ -2,29 +2,27 @@
 model = dict(
     type='TridentHTC',
     num_stages=3,
-    val_range=((0, 20), (15, 35), (35, -1)),
-    pretrained='modelzoo://resnet50',  # 'open-mmlab://resnext101_64x4d',
+    scale_aware=True,
+    valid_range=((0, 90), (30, 160), (90, -1)),
+    pretrained='modelzoo://resnet101',  # 'open-mmlab://resnext101_64x4d',
     interleaved=True,
     mask_info_flow=True,
     backbone=dict(
         type='SharedResNet',
-        depth=50,
-        out_indices=(2, 3),
-        norm_cfg=dict(type='BN', requires_grad=True),
-        norm_eval=False),
-    neck=dict(
-        type='TridentNeck',
-        fpn_in_channels=1024,
-        rcnn_in_channels=2048,
-        fpn_out_channels=1024,
-        rcnn_out_channels=256),
+        depth=101,
+        out_indices=(2,),  # rpn feat and rcnn feat
+        shared_layer=2,
+        shared=True,
+        shared_test=True,
+        norm_cfg=dict(type='BN', requires_grad=True),),
+    neck=None,
     rpn_head=dict(
         type='RPNHead',
         in_channels=1024,
         feat_channels=256,
         anchor_scales=[1/8, 1/4, 1, 2],        # scale*stride为边长基准
         anchor_ratios=[0.5, 1.0, 2.0],
-        anchor_strides=[16],                   # 对应rpn feats数目
+        anchor_strides=[16],                   # 对应rpn特征
         target_means=[.0, .0, .0, .0],
         target_stds=[1.0, 1.0, 1.0, 1.0],
         loss_cls=dict(
@@ -34,12 +32,12 @@ model = dict(
         type='SingleRoIExtractor',
         roi_layer=dict(type='RoIAlign', out_size=7, sample_num=4),
         out_channels=256,
-        featmap_strides=[16]),  # <-----待定参数(原[4, 8, 16, 32])
+        featmap_strides=[16]),  # 对应rcnn特征
     bbox_head=[
         dict(
             type='SharedFCBBoxHead',
             num_fcs=2,
-            in_channels=256,
+            in_channels=1024,
             fc_out_channels=1024,
             roi_feat_size=7,
             num_classes=3,
@@ -57,7 +55,7 @@ model = dict(
         dict(
             type='SharedFCBBoxHead',
             num_fcs=2,
-            in_channels=256,
+            in_channels=1024,
             fc_out_channels=1024,
             roi_feat_size=7,
             num_classes=3,
@@ -75,7 +73,7 @@ model = dict(
         dict(
             type='SharedFCBBoxHead',
             num_fcs=2,
-            in_channels=256,
+            in_channels=1024,
             fc_out_channels=1024,
             roi_feat_size=7,
             num_classes=3,
@@ -99,8 +97,8 @@ model = dict(
     mask_head=dict(
         type='HTCMaskHead',
         num_convs=4,
-        in_channels=256,
-        conv_out_channels=256,
+        in_channels=1024,
+        conv_out_channels=1024,  # mask info flow要求in和out的channels相等
         num_classes=3,
         loss_mask=dict(
             type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)),

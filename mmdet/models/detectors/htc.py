@@ -67,7 +67,7 @@ class HybridTaskCascade(CascadeRCNN):
 
         cls_score, bbox_pred = bbox_head(bbox_feats)
 
-        bbox_targets = bbox_head.get_target(sampling_results, rcnn_train_cfg)
+        bbox_targets = bbox_head.get_target(sampling_results, gt_bboxes, gt_labels, rcnn_train_cfg)
         # labels, label_weights, bbox_proposal, bbox_targets, bbox_weights
         if bbox_head.iou_target:
             bbox_pred = delta2bbox(bbox_targets[-1],

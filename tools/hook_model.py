@@ -24,9 +24,9 @@ def backward_hook(module, grad_input, grad_output):
     print(grad_output.data.shape)
 
 
-HOOT_MODE = "inference"  # "inference" or "train"
+HOOT_MODE = "train"  # "inference" or "train"
 ROOT_DIR = '/home/hellcatzm/mmdetection'
-CONFIG_NAME = 'configs/carbonate/trident/htc_trident.py'
+CONFIG_NAME = 'configs/carbonate/htc_libra_dconv2_c3-c5_segc_x101_64x4d_pan.py'
 
 config_file = os.path.join(ROOT_DIR, CONFIG_NAME)
 cfg = mmcv.Config.fromfile(config_file)

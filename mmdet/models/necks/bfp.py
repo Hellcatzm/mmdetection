@@ -36,7 +36,7 @@ class BFP(nn.Module):
                  conv_cfg=None,
                  norm_cfg=None):
         super(BFP, self).__init__()
-        assert refine_type in [None, 'conv', 'non_local']
+        assert refine_type in [None, 'conv', 'non_local', 'cca']
 
         self.in_channels = in_channels
         self.num_levels = num_levels
@@ -62,6 +62,8 @@ class BFP(nn.Module):
                 use_scale=False,
                 conv_cfg=self.conv_cfg,
                 norm_cfg=self.norm_cfg)
+        elif self.refine_type == 'cca':
+            self.refine = CrissCrossAttention(self.in_channels)
 
     def init_weights(self):
         for m in self.modules():
@@ -88,6 +90,8 @@ class BFP(nn.Module):
         # step 2: refine gathered features
         if self.refine_type is not None:
             bsf = self.refine(bsf)
+            if self.refine_type is 'cca':
+                bsf = self.refine(bsf)
 
         # step 3: scatter refined features to multi-levels by a residual path
         outs = []

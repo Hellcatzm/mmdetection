@@ -385,13 +385,6 @@ class TridResLayer(nn.Module):
                     bias=False),
                 build_norm_layer(norm_cfg, planes * block.expansion)[1],
             )
-            # downsample = build_conv_layer(None,
-            #                               inplanes,
-            #                               planes * block.expansion,
-            #                               kernel_size=1,
-            #                               stride=stride,
-            #                               bias=False)
-
 
         self.layer0 = Bottleneck(inplanes,
                                  planes,

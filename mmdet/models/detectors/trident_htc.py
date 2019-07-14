@@ -36,11 +36,6 @@ class TridentHTC(HybridTaskCascade):
                       proposals=None):
         x = self.extract_feat(img)
 
-        # c4_shape = list(x[0].shape)
-        # c4_shape[0] *= 3
-        # x = torch.stack([x[0]] * 3, dim=1)
-        # x = [x.view(c4_shape)]
-
         if not self.backbone.shared:
             # x[0].register_hook(hook)
             c41_shape = list(x[0].shape)
@@ -95,12 +90,19 @@ class TridentHTC(HybridTaskCascade):
         gt_masks = gt_masks_
         gt_bboxes_ignore = gt_bboxes_ignore_
 
+        ss_shape = list(gt_semantic_seg.shape)
+        ss_shape[0] *= 3
+        gt_semantic_seg = torch.stack([gt_semantic_seg]*3, dim=1)
+        gt_semantic_seg = gt_semantic_seg.view(tuple(ss_shape))
+
+        idx = torch.nonzero(val_index).squeeze()
+        gt_semantic_seg = gt_semantic_seg[idx]
+
         if len(x) != 1:
             rpn_ids, rcnn_ids = 0, 1
         else:
             rpn_ids = rcnn_ids = 0
         if self.scale_aware:
-            idx = torch.nonzero(val_index).squeeze()
             rpn_feat = [x[rpn_ids][idx][None]] if idx.numel() == 1 else [x[rpn_ids][idx]]
             rcnn_feat = [x[rcnn_ids][idx][None]] if idx.numel() == 1 else [x[rcnn_ids][idx]]
         else:
@@ -129,8 +131,14 @@ class TridentHTC(HybridTaskCascade):
         proposal_inputs = rpn_outs + (img_meta, proposal_cfg)
         proposal_list = self.rpn_head.get_bboxes(*proposal_inputs)  # [list(num imgs) [2000(配置文件指定), 5]]
 
-        assert not self.with_semantic, "Not supply yet"
-        semantic_feat = None
+        # semantic segmentation part
+        # 2 outputs: segmentation prediction and embedded features
+        if self.with_semantic:
+            semantic_pred, semantic_feat = self.semantic_head(rcnn_feat)
+            loss_seg = self.semantic_head.loss(semantic_pred, gt_semantic_seg)
+            losses['loss_semantic_seg'] = loss_seg
+        else:
+            semantic_feat = None
 
         num_imgs = len(img_meta)
         for i in range(self.num_stages):

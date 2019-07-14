@@ -9,7 +9,7 @@ model = dict(
     mask_info_flow=True,
     backbone=dict(
         type='SharedResNet',
-        depth=101,
+        depth=50,
         out_indices=(2,),  # rpn feat and rcnn feat
         shared_layer=2,
         shared=True,
@@ -102,7 +102,21 @@ model = dict(
         num_classes=3,
         loss_mask=dict(
             type='CrossEntropyLoss', use_mask=True, loss_weight=1.0)),
-)
+    semantic_roi_extractor=dict(
+        type='SingleRoIExtractor',
+        roi_layer=dict(type='RoIAlign', out_size=14, sample_num=4),
+        out_channels=256,
+        featmap_strides=[16]),  # semantic分支取样仅在8采样位置
+    semantic_head=dict(
+        type='FusedSemanticHead',
+        num_ins=1,
+        fusion_level=0,
+        num_convs=4,
+        in_channels=1024,
+        conv_out_channels=1024,  # 输出对应mask head的输入
+        num_classes=3,  # 语义标签类别0,1和背景
+        ignore_label=255,
+        loss_weight=0.2))
 # model training and testing settings
 train_cfg = dict(
     # rpn_head->rpn_propose->rpn_assigner->rpn_samper
@@ -211,7 +225,7 @@ data = dict(
         size_divisor=32,  # 可以被32整除
         flip_ratio=0.5,
         seg_prefix=data_root + 'stufflabel/',
-        seg_scale_factor=1 / 8,  # 语义map缩放比例
+        seg_scale_factor=1 / 16,  # 语义map缩放比例
         with_mask=True,
         with_crowd=True,
         with_label=True,

@@ -1,7 +1,7 @@
 # model settings
 model = dict(
     type='FasterRCNN',
-    pretrained=None,  # 'modelzoo://resnet50',
+    pretrained='modelzoo://resnet50',
     backbone=dict(
         type='ResNet',
         depth=50,
@@ -159,7 +159,7 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 12
+total_epochs = 26
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = './work_dirs/faster_rcnn_r50_fpn_1x'

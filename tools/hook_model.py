@@ -24,8 +24,8 @@ def backward_hook(module, grad_input, grad_output):
     print(grad_output.data.shape)
 
 
-HOOT_MODE = "train"  # "inference" or "train"
-ROOT_DIR = '/home/hellcatzm/mmdetection'
+HOOT_MODE = "inference"  # "inference" or "train"
+ROOT_DIR = '/home/gttintern/mmdetection'
 CONFIG_NAME = 'configs/carbonate/trident/htc_trident.py'
 
 config_file = os.path.join(ROOT_DIR, CONFIG_NAME)

@@ -5,6 +5,7 @@ import torch.autograd as autograd
 import torch.cuda.comm as comm
 import torch.nn.functional as F
 from torch.autograd.function import once_differentiable
+from mmcv.cnn import constant_init, normal_init, xavier_init
 import time
 import functools
 
@@ -84,10 +85,15 @@ class CrissCrossAttention(nn.Module):
         super(CrissCrossAttention,self).__init__()
         self.chanel_in = in_dim
 
-        self.query_conv = nn.Conv2d(in_channels = in_dim , out_channels = in_dim//8 , kernel_size= 1)
-        self.key_conv = nn.Conv2d(in_channels = in_dim , out_channels = in_dim//8 , kernel_size= 1)
-        self.value_conv = nn.Conv2d(in_channels = in_dim , out_channels = in_dim , kernel_size= 1)
+        self.query_conv = nn.Conv2d(in_channels= in_dim, out_channels = in_dim//8, kernel_size=1)
+        self.key_conv = nn.Conv2d(in_channels=in_dim, out_channels = in_dim//8, kernel_size=1)
+        self.value_conv = nn.Conv2d(in_channels=in_dim, out_channels = in_dim, kernel_size=1)
         self.gamma = nn.Parameter(torch.zeros(1))
+
+    def init_weights(self, std=0.01, zeros_init=True):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                xavier_init(m, distribution='uniform')
 
     def forward(self, x):
         proj_query = self.query_conv(x)

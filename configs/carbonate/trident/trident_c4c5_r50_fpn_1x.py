@@ -3,28 +3,24 @@ model = dict(
     type='TridentRCNN',
     pretrained='modelzoo://resnet50',
     scale_aware=False,
-    valid_range=((0, 90), (30, 160), (90, -1)),
+    valid_range=((0, -1), (0, -1), (0, -1)),
     backbone=dict(
         type='SharedResNet',
         depth=50,
-        out_indices=(2, 3), # rpn feat and rcnn feat
+        out_indices=(2, 3),  # rpn feat and rcnn feat
         shared_layer=2,
         shared=True,
         shared_test=True,
-        norm_cfg=dict(type='SyncBN', requires_grad=True),
-        # dcn=dict(
-        #     modulated=True,
-        #     groups=1,
-        #     deformable_groups=1,
-        #     fallback_on_stride=False),
-        # stage_with_dcn=(False, True, True, True)
+        norm_cfg=dict(type='SyncBN', requires_grad=True),),
+    neck=dict(
+        type='TridentNeck',
+        fpn_in_channels=1024,
+        rcnn_in_channels=2048,
+        fpn_out_channels=256,
+        rcnn_out_channels=1024,
+        rpn_neck=False,
+        rcnn_neck=True
     ),
-    # neck=dict(
-    #     type='TridentNeck',
-    #     fpn_in_channels=1024,
-    #     rcnn_in_channels=2048,
-    #     fpn_out_channels=256,
-    #     rcnn_out_channels=256),
     rpn_head=dict(
         type='RPNHead',
         in_channels=1024,
@@ -45,7 +41,7 @@ model = dict(
     bbox_head=dict(
         type='SharedFCBBoxHead',
         num_fcs=2,
-        in_channels=2048,
+        in_channels=1024,
         fc_out_channels=1024,
         roi_feat_size=7,
         num_classes=3,
@@ -169,7 +165,7 @@ log_config = dict(
     ])
 # yapf:enable
 # runtime settings
-total_epochs = 12
+total_epochs = 26
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
 work_dir = 'work_dirs/trident_rcnn_r50_fpn_1x_carb'

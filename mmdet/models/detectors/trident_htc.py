@@ -81,7 +81,7 @@ class TridentHTC(HybridTaskCascade):
                         img_meta_.append(img_meta[img_num])
                         gt_bboxes_.append(gt_bboxes[img_num])  # [3n, [gts_v, 4]]
                         gt_labels_.append(gt_labels[img_num])  # [3n, [gts_v]]
-                        gt_masks_.append(gt_masks[img_num][arg_idx.cpu()])
+                        gt_masks_.append(gt_masks[img_num])
                         gt_bboxes_ignore_.append(gt_bboxes_ignore[img_num])
 
         img_meta = img_meta_
@@ -241,8 +241,10 @@ class TridentHTC(HybridTaskCascade):
                 proposal_ = torch.cat([proposal_, p])
             proposal_list = [nms(proposal_, 0.7)[0]]
 
-        assert not self.with_semantic, "Not supply yet"
-        semantic_feat = None
+        if self.with_semantic:
+            _, semantic_feat = self.semantic_head(rcnn_feat)
+        else:
+            semantic_feat = None
 
         img_shape = img_meta[0]['img_shape']
         ori_shape = img_meta[0]['ori_shape']

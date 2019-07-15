@@ -7,11 +7,17 @@ model = dict(
     backbone=dict(
         type='SharedResNet',
         depth=50,
-        out_indices=(2,),  # rpn feat and rcnn feat
+        out_indices=(2, 3),  # rpn feat and rcnn feat
         shared_layer=2,
         shared=True,
         shared_test=True,
-        norm_cfg=dict(type='SyncBN', requires_grad=True)),
+        norm_cfg=dict(type='SyncBN', requires_grad=True),
+        dcn=dict(
+            modulated=False,
+            groups=1,
+            deformable_groups=1,
+            fallback_on_stride=False),
+        stage_with_dcn=(False, True, True, True)),
     rpn_head=dict(
         type='RPNHead',
         in_channels=1024,
@@ -28,11 +34,11 @@ model = dict(
         type='SingleRoIExtractor',
         roi_layer=dict(type='RoIAlign', out_size=7, sample_num=2),
         out_channels=256,
-        featmap_strides=[16]),
+        featmap_strides=[32]),
     bbox_head=dict(
         type='SharedFCBBoxHead',
         num_fcs=2,
-        in_channels=1024,
+        in_channels=2048,
         fc_out_channels=1024,
         roi_feat_size=7,
         num_classes=3,

@@ -3,6 +3,11 @@
 本项目基于商汤开源目标检测框架mmdetection，为了适应自己的项目需求，做出了较多修改。<br>
 #### 改动概览：<br>
 >辅助工具：<br>
+```
+tools/hook_model.py
+tools/subprocess_train.py
+TODO 将外部ipython脚本收录进本目录
+```
 >PAN bottom-up path:<br>
 ```
 mmdet/models/necks/fpn.py

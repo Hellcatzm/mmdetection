@@ -32,27 +32,29 @@ mmdet/models/losses/soft_dice_loss.py
 >GIoU Loss:<br>
 ```
 mmdet/models/losses/__init__.py
-mmdet/models/losses/giou_loss.py
-mmdet/models/detectors/htc 的_bbox_forward_train函数
-mmdet/models/core/bbox/bbox_target.py 添加bbox_iou_target_single函数
-mmdet/models/bbox_heads/bbox_head 中BBoxHead类获取bbox_target方法调整
+mmdet/models/losses/giou_loss.py            损失函数本体
+mmdet/models/detectors/htc.py               _bbox_forward_train函数修改
+mmdet/models/core/bbox/bbox_target.py       添加bbox_iou_target_single函数
+mmdet/models/bbox_heads/bbox_head.py        BBoxHead类获取bbox_target方法调整
 ```
 >Trident RCNN/HTC 相关改动：<br>
 ```
-mmdet/models/backbones/sharedresnet.py
-mmdet/models/backbones/sharedresnet_raw.py
-mmdet/models/detectors/trident_htc.py
-mmdet/models/detectors/trident_rcnn.py
-mmdet/models/necks/trident_neck.py
+mmdet/models/backbones/sharedresnet.py      基于resnet的trident backbone
+mmdet/models/backbones/sharedresnet_raw.py  废弃的trident backbone,调bug方便
+mmdet/models/detectors/trident_htc.py       trident htc检测器
+mmdet/models/detectors/trident_rcnn.py      trident rcnn检测器
+mmdet/models/necks/trident_neck.py          trident的特殊neck,应对显存不够为特征降维
+mmdet/ops/shared_layers/__init__.py
+mmdet/ops/shared_layers/shared_layers.py    共享卷积/DCN/BN实现
 ```
 >Criss Crioss Attention：<br>
 ```
 mmdet/models/plugins/cc_attention/modules/__init__.py
-mmdet/models/plugins/cc_attention/modules/cc_attation.py
+mmdet/models/plugins/cc_attention/modules/cc_attation.py   封装好的pytorch cca module节点
 mmdet/models/plugins/cc_attention/src/__init__.py
-mmdet/models/plugins/cc_attention/src/cca_cuda.cpp
-mmdet/models/plugins/cc_attention/src/cca_kernel.cu
+mmdet/models/plugins/cc_attention/src/cca_cuda.cpp         cuda核函数
+mmdet/models/plugins/cc_attention/src/cca_kernel.cu        forward/backward函数C++封装
 mmdet/models/plugins/cc_attention/__init__.py
-mmdet/models/plugins/cc_attention/gradcheck.py
-mmdet/models/plugins/cc_attention/setup.py
+mmdet/models/plugins/cc_attention/gradcheck.py             梯度检查脚本,直接运行即可
+mmdet/models/plugins/cc_attention/setup.py                 setup脚本,编译好mmdetection后需要单独编译本脚本
 ```

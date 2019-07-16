@@ -25,6 +25,8 @@ mmdet/core/mask/mask_target.py
 mmdet/models/mask_heads/htc_mask-scoring_head.py
 ```
 >Soft Dice Loss:<br>
+```
+```
 >GIoU Loss:<br>
 ```
 mmdet/models/losses/__init__.py
@@ -34,4 +36,8 @@ mmdet/models/core/bbox/bbox_target.py 添加bbox_iou_target_single函数
 mmdet/models/bbox_heads/bbox_head 中BBoxHead类获取bbox_target方法调整
 ```
 >Trident RCNN/HTC 相关改动：<br>
+```
+```
 >Criss Crioss Attention：<br>
+```
+```

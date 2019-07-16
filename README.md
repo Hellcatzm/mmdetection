@@ -26,6 +26,7 @@ mmdet/models/mask_heads/htc_mask-scoring_head.py
 ```
 >Soft Dice Loss:<br>
 ```
+mmdet/models/losses/soft_dice_loss.py
 ```
 >GIoU Loss:<br>
 ```
@@ -37,7 +38,20 @@ mmdet/models/bbox_heads/bbox_head 中BBoxHead类获取bbox_target方法调整
 ```
 >Trident RCNN/HTC 相关改动：<br>
 ```
+mmdet/models/backbones/sharedresnet.py
+mmdet/models/backbones/sharedresnet_raw.py
+mmdet/models/detectors/trident_htc.py
+mmdet/models/detectors/trident_rcnn.py
+mmdet/models/necks/trident_neck.py
 ```
 >Criss Crioss Attention：<br>
 ```
+mmdet/models/plugins/cc_attention/modules/__init__.py
+mmdet/models/plugins/cc_attention/modules/cc_attation.py
+mmdet/models/plugins/cc_attention/src/__init__.py
+mmdet/models/plugins/cc_attention/src/cca_cuda.cpp
+mmdet/models/plugins/cc_attention/src/cca_kernel.cu
+mmdet/models/plugins/cc_attention/__init__.py
+mmdet/models/plugins/cc_attention/gradcheck.py
+mmdet/models/plugins/cc_attention/setup.py
 ```

@@ -5,19 +5,19 @@
 本部分记录了改动文件,其基础版本为本fork的master分支,后续如果需要更新mmdetection版本的话把下面记录的文件依次放入或酌情修改即可(大概没问题)。<br>
 >辅助工具：<br>
 ```
-tools/hook_model.py
-tools/subprocess_train.py
-TODO 将外部ipython脚本收录进本目录
+tools/hook_model.py              模拟train/inference过程,调bug用
+tools/subprocess_train.py        自动训练多个配置文件
+TODO 将外部ipython辅助脚本收录进本目录
 ```
 >PAN bottom-up path:<br>
 ```
-mmdet/models/necks/fpn.py
+mmdet/models/necks/fpn.py       简单的为FPN添加了一个可选路径
 ```
 >SEResNeXt(with GC module) backbone:<br>
 ```
 mmdet/models/backbones/__init__.py
-mmdet/models/backbones/senet_raw.py
-mmdet/models/backbones/seresnext.py
+mmdet/models/backbones/senet_raw.py   包含了SENet154/SEResNet/SEResNeXt,没有预训练文件故废弃
+mmdet/models/backbones/seresnext.py   基于ResNeXt的SEResNeXt,有GCN选项,可载人ResNeXt的预训练文件
 ```
 >Mask Scoring head:<br>
 ```
@@ -39,7 +39,7 @@ mmdet/models/bbox_heads/bbox_head.py        BBoxHead类获取bbox_target方法�
 ```
 >Trident RCNN/HTC 相关改动：<br>
 ```
-mmdet/models/backbones/sharedresnet.py      基于resnet的trident backbone
+mmdet/models/backbones/sharedresnet.py      基于ResNet的trident backbone,可载人ResNet的预训练文件
 mmdet/models/backbones/sharedresnet_raw.py  废弃的trident backbone,调bug方便
 mmdet/models/detectors/trident_htc.py       trident htc检测器
 mmdet/models/detectors/trident_rcnn.py      trident rcnn检测器

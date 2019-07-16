@@ -7,9 +7,9 @@
 >SEResNeXt(with GC module) backbone:<br>
 >Mask Scoring head:<br>
 ```
-   mmdet/models/mask_heads/__init__.py<br>
-   mmdet/core/mask/mask_target.py<br>
-   mmdet/models/mask_heads/htc_mask-scoring_head.py<br>
+   mmdet/models/mask_heads/__init__.py
+   mmdet/core/mask/mask_target.py
+   mmdet/models/mask_heads/htc_mask-scoring_head.py
 ```
 >Soft Dice Loss:<br>
 >GIoU Loss:<br>

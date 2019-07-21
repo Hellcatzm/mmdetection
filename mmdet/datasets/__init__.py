@@ -8,10 +8,11 @@ from .concat_dataset import ConcatDataset
 from .repeat_dataset import RepeatDataset
 from .extra_aug import ExtraAugmentation
 from .carbonate import CarbonateDataset
+from .supervisely import SuperviselyDataset
 
 __all__ = [
     'CustomDataset', 'XMLDataset', 'CocoDataset', 'VOCDataset', 'GroupSampler',
     'DistributedGroupSampler', 'build_dataloader', 'to_tensor', 'random_scale',
-    'show_ann', 'get_dataset', 'ConcatDataset', 'RepeatDataset', 'CarbonateDataset'
-    'ExtraAugmentation'
+    'show_ann', 'get_dataset', 'ConcatDataset', 'RepeatDataset', 'CarbonateDataset',
+    'SuperviselyDataset', 'ExtraAugmentation'
 ]

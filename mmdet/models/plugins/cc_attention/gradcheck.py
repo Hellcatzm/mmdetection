@@ -5,7 +5,7 @@ from torch.autograd import gradcheck
 import os.path as osp
 import sys
 sys.path.append(osp.abspath(osp.join(__file__, '../../')))
-from cc_attention_new import CrissCrossAttention, ca_weight, ca_map
+from cc_attention import CrissCrossAttention, ca_weight, ca_map
 
 import torch
 t = torch.rand(2, 32, 5, 5, requires_grad=True).cuda()  # dtype=torch.float64
